@@ -49,7 +49,7 @@ func init() {
 		})
 	list.OnSelected = func(i widget.ListItemID) {
 		hy.window.Clipboard().SetContent(hy.data[i])
-		exec.Command("smplayer", hy.data[i]).Run()
+		exec.Command("smplayer", hy.data[i]).Start()
 	}
 	hy.list = list
 }

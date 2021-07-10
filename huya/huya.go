@@ -66,10 +66,6 @@ func extractUrl(content string) ([]ResultUrl, error) {
 			CdnType: cdnType + "_flv",
 			Url:     value.Get("sFlvUrl").String() + "/" + urlPart,
 		})
-		result = append(result, ResultUrl{
-			CdnType: cdnType + "_hls",
-			Url:     value.Get("sHlsUrl").String() + "/" + urlPart,
-		})
 		return true
 	})
 
