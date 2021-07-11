@@ -10,15 +10,13 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
-	"io/ioutil"
-	"log"
 	"net/url"
-	"os"
 	"os/exec"
 	"strings"
 )
 
 type App struct {
+	fyne     fyne.App
 	window   fyne.Window
 	entry    *widget.Entry
 	button   *widget.Button
@@ -30,12 +28,13 @@ type App struct {
 }
 
 func New() *App {
-	a := app.New()
+	a := app.NewWithID("catya")
 	a.Settings().SetTheme(&theme.MyTheme{})
 	return &App{
+		fyne:     a,
 		api:      api.New(),
 		dataList: []string{},
-		window:   a.NewWindow("Catya Live"),
+		window:   a.NewWindow("Catya"),
 		recents:  []string{"lpl", "s4k"},
 	}
 }
@@ -161,41 +160,17 @@ func (app *App) alert(msg string) {
 }
 
 func (app *App) saveRecent() {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		log.Println("配置目录不存在，最近访问记录无法保存：" + err.Error())
-		return
-	}
-	file, err := os.Create(dir + "/.catya_recent")
-	if err != nil {
-		return
-	}
 	text, err := json.Marshal(&app.recents)
 	if err != nil {
 		return
 	}
-	_, err = file.Write(text)
-	if err != nil {
-		log.Println("最近访问记录保存失败：" + err.Error())
-		return
-	}
+	app.fyne.Preferences().SetString("recents", string(text))
 }
 
 func (app *App) loadRecent() ([]string, error) {
-	dir, err := os.UserConfigDir()
-	if err != nil {
-		return nil, err
-	}
-	file, err := os.Open(dir + "/.catya_recent")
-	if err != nil {
-		return nil, err
-	}
-	all, err := ioutil.ReadAll(file)
-	if err != nil {
-		return nil, err
-	}
+	recents := app.fyne.Preferences().String("recents")
 	var content []string
-	err = json.Unmarshal(all, &content)
+	err := json.Unmarshal([]byte(recents), &content)
 	if err != nil {
 		return nil, err
 	}
