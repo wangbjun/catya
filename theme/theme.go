@@ -11,8 +11,7 @@ type MyTheme struct{}
 var _ fyne.Theme = (*MyTheme)(nil)
 
 // Font return bundled font resource
-// ResourceSourceHanSansTtf 即是 bundle.go 文件中 var 的变量名
-func (m MyTheme) Font(s fyne.TextStyle) fyne.Resource {
+func (*MyTheme) Font(s fyne.TextStyle) fyne.Resource {
 	return resourceWqyMicroheiTtc
 }
 func (*MyTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
