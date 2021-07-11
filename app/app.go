@@ -8,6 +8,7 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 	"io/ioutil"
 	"log"
@@ -41,9 +42,19 @@ func New() *App {
 
 func (app *App) Run() {
 	app.init()
-	app.window.SetContent(container.NewBorder(
-		container.NewVBox(container.NewHBox(widget.NewLabel("最近访问直播间："),
-			app.top), app.entry, app.button), nil, nil, nil, app.list))
+	app.window.SetContent(
+		container.NewBorder(
+			container.NewVBox(
+				container.NewHBox(widget.NewLabel("最近访问直播间："), app.top),
+				app.entry,
+				container.NewGridWithColumns(3, layout.NewSpacer(), app.button, layout.NewSpacer()),
+				widget.NewSeparator(),
+			),
+			nil,
+			nil,
+			nil,
+			app.list,
+		))
 	app.window.Resize(fyne.NewSize(640, 480))
 	app.window.ShowAndRun()
 }
@@ -63,11 +74,21 @@ func (app *App) init() {
 			return widget.NewLabel("")
 		},
 		func(i widget.ListItemID, o fyne.CanvasObject) {
-			o.(*widget.Label).SetText(app.dataList[i])
+			data := app.dataList[i]
+			textCount := int(o.Size().Width) / 8
+			if textCount >= len(data) {
+				o.(*widget.Label).SetText(data)
+			} else {
+				o.(*widget.Label).SetText(data[:textCount] + "...")
+			}
 		})
 	list.OnSelected = func(i widget.ListItemID) {
+		// 选中复制地址到粘贴板，自动打开播放器
 		app.window.Clipboard().SetContent(app.dataList[i])
-		exec.Command("smplayer", app.dataList[i]).Start()
+		err := exec.Command("smplayer", app.dataList[i]).Start()
+		if err != nil {
+			exec.Command("mpv", app.dataList[i]).Start()
+		}
 	}
 	app.list = list
 
