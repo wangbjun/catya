@@ -16,7 +16,6 @@ import (
 )
 
 type App struct {
-	fyne     fyne.App
 	window   fyne.Window
 	entry    *widget.Entry
 	button   *widget.Button
@@ -31,7 +30,6 @@ func New() *App {
 	a := app.NewWithID("catya")
 	a.Settings().SetTheme(&theme.MyTheme{})
 	return &App{
-		fyne:     a,
 		api:      api.New(),
 		dataList: []string{},
 		window:   a.NewWindow("Catya"),
@@ -164,11 +162,11 @@ func (app *App) saveRecent() {
 	if err != nil {
 		return
 	}
-	app.fyne.Preferences().SetString("recents", string(text))
+	fyne.CurrentApp().Preferences().SetString("recents", string(text))
 }
 
 func (app *App) loadRecent() ([]string, error) {
-	recents := app.fyne.Preferences().String("recents")
+	recents := fyne.CurrentApp().Preferences().String("recents")
 	var content []string
 	err := json.Unmarshal([]byte(recents), &content)
 	if err != nil {
