@@ -53,6 +53,7 @@ func (app *App) Run() {
 			app.list,
 		))
 	app.window.Resize(fyne.NewSize(640, 480))
+	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
 
