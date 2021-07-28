@@ -63,7 +63,6 @@ func (app *App) init() {
 	app.entry = entry
 
 	app.button = widget.NewButton("提交", app.submit)
-
 	list := widget.NewList(
 		func() int {
 			return len(app.dataList)
@@ -89,7 +88,6 @@ func (app *App) init() {
 		}
 	}
 	app.list = list
-
 	app.top = container.NewHBox()
 	recent, err := app.loadRecent()
 	if err == nil && len(recent) > 0 {
