@@ -6,9 +6,7 @@
 ![](https://s3.bmp.ovh/imgs/2021/08/8e10c890bc58c33b.png)
 
 ## 用法
-我自己用的Ubuntu桌面，所以目前只有Linux版本的安装包是最新的，虽然是跨平台但是和普通Go应用交叉编译不一样，比较麻烦，感兴趣的可以参考一下官方的文档，自行编译：
-
-官方编译打包文档：https://developer.fyne.io/started/packaging
+目前编译了Linux、Windows、Mac这几个平台的安装包，需要的可以从release页面下载安装，其它平台可以参考官方编译文档自行编译：https://developer.fyne.io/started/packaging
 
 1.复制虎牙直播间地址，或者直接输入直播间号，比如lpl，或者s4k（4k直播间），点击查询，下面就会列出所有源地址
 
