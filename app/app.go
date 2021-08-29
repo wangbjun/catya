@@ -87,6 +87,7 @@ func (app *App) init() {
 		if err != nil {
 			exec.Command("mpv", app.dataList[i]).Start()
 		}
+		time.Sleep(time.Millisecond * 500)
 		app.list.Unselect(i)
 	}
 	app.list = list
