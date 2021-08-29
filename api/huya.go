@@ -56,7 +56,7 @@ func extractUrl(content string) ([]ResultUrl, error) {
 	parse := gjson.Parse(content)
 	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
 	if !streamInfo.Exists() || len(streamInfo.Array()) == 0 {
-		return nil, nil
+		return nil, errors.New("直播间未开播或不存在")
 	}
 	var result []ResultUrl
 	streamInfo.ForEach(func(key, value gjson.Result) bool {

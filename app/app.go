@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 type App struct {
@@ -62,7 +63,7 @@ func (app *App) init() {
 	entry.PlaceHolder = "请输入直播间地址或房间号，比如：https://www.huya.com/lpl、lpl"
 	app.entry = entry
 
-	app.button = widget.NewButton("提交", app.submit)
+	app.button = widget.NewButton("查询", app.submit)
 	list := widget.NewList(
 		func() int {
 			return len(app.dataList)
@@ -86,6 +87,7 @@ func (app *App) init() {
 		if err != nil {
 			exec.Command("mpv", app.dataList[i]).Start()
 		}
+		app.list.Unselect(i)
 	}
 	app.list = list
 	app.top = container.NewHBox()
@@ -115,9 +117,12 @@ func (app *App) submit() {
 	app.button.Text = "查询中......"
 	app.button.Disable()
 	defer func() {
-		app.button.Text = "提交"
+		app.button.Text = "查询"
 		app.button.Enable()
 	}()
+	for i, _ := range app.dataList {
+		app.list.Unselect(i)
+	}
 	app.dataList = []string{}
 	urls, err := app.api.GetRealUrl(roomId)
 	if err != nil {
@@ -127,8 +132,6 @@ func (app *App) submit() {
 	for _, v := range urls {
 		app.dataList = append(app.dataList, v.Url)
 	}
-	app.list.Unselect(0)
-
 	var isExisted = false
 	for _, recent := range app.recents {
 		if recent == roomId {
@@ -153,7 +156,10 @@ func (app *App) submit() {
 }
 
 func (app *App) alert(msg string) {
-	dialog.ShowInformation("提示", msg, app.window)
+	info := dialog.NewInformation("提示", msg, app.window)
+	info.Show()
+	time.Sleep(time.Second)
+	info.Hide()
 }
 
 func (app *App) saveRecent() {
