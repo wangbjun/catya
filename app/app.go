@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"math/rand"
 	"net/url"
 	"os/exec"
 	"strings"
@@ -17,24 +18,28 @@ import (
 )
 
 type App struct {
-	window   fyne.Window
-	entry    *widget.Entry
-	button   *widget.Button
-	list     *widget.List
-	top      *fyne.Container
-	api      api.Huya
-	dataList []string
-	recents  []string
+	api     api.Huya
+	recents []Room
+
+	window fyne.Window
+	roomId *widget.Entry
+	remark *widget.Entry
+	button *widget.Button
+	list   *fyne.Container
+}
+
+type Room struct {
+	RoomId string
+	Remark string
 }
 
 func New() *App {
 	a := app.NewWithID("catya")
 	a.Settings().SetTheme(&theme.MyTheme{})
 	return &App{
-		api:      api.New(),
-		dataList: []string{},
-		window:   a.NewWindow("Catya"),
-		recents:  []string{"lpl", "s4k"},
+		api:     api.New(),
+		window:  a.NewWindow("Catya"),
+		recents: []Room{{"lpl", "LPL"}, {"s4k", "LPL 4K"}, {"991111", "TheShy"}},
 	}
 }
 
@@ -43,15 +48,14 @@ func (app *App) Run() {
 	app.window.SetContent(
 		container.NewBorder(
 			container.NewVBox(
-				container.NewHBox(widget.NewLabel("最近访问直播间："), app.top),
-				app.entry,
+				app.roomId, app.remark,
 				container.NewGridWithColumns(3, layout.NewSpacer(), app.button, layout.NewSpacer()),
 				widget.NewSeparator(),
 			),
 			nil,
 			nil,
 			nil,
-			app.list,
+			widget.NewCard("", "最近访问记录，双击可以快速打开：", container.NewGridWithRows(9, app.list)),
 		))
 	app.window.Resize(fyne.NewSize(640, 480))
 	app.window.CenterOnScreen()
@@ -59,108 +63,100 @@ func (app *App) Run() {
 }
 
 func (app *App) init() {
-	entry := widget.NewEntry()
-	entry.PlaceHolder = "请输入直播间地址或房间号，比如：https://www.huya.com/lpl、lpl"
-	app.entry = entry
+	rand.Seed(time.Now().UnixNano())
 
-	app.button = widget.NewButton("查询", app.submit)
-	list := widget.NewList(
-		func() int {
-			return len(app.dataList)
-		},
-		func() fyne.CanvasObject {
-			return widget.NewLabel("")
-		},
-		func(i widget.ListItemID, o fyne.CanvasObject) {
-			data := app.dataList[i]
-			textCount := int(o.Size().Width) / 8
-			if textCount >= len(data) {
-				o.(*widget.Label).SetText(data)
-			} else {
-				o.(*widget.Label).SetText(data[:textCount] + "...")
-			}
-		})
-	list.OnSelected = func(i widget.ListItemID) {
-		// 选中复制地址到粘贴板，自动打开播放器
-		app.window.Clipboard().SetContent(app.dataList[i])
-		err := exec.Command("smplayer", app.dataList[i]).Start()
-		if err != nil {
-			exec.Command("mpv", app.dataList[i]).Start()
-		}
-		time.Sleep(time.Millisecond * 500)
-		app.list.Unselect(i)
+	app.roomId = widget.NewEntry()
+	app.roomId.PlaceHolder = "请输入直播间地址或ID，比如：https://www.huya.com/991111、991111"
+	app.roomId.OnSubmitted = func(roomId string) {
+		app.submit(roomId)
 	}
-	app.list = list
-	app.top = container.NewHBox()
+	app.remark = widget.NewEntry()
+	app.remark.PlaceHolder = "可选备注，比如：TheShy"
+
+	app.button = widget.NewButton("查询&打开", func() {
+		app.submit("")
+	})
+	app.list = container.NewHBox()
 	recent, err := app.loadRecent()
 	if err == nil && len(recent) > 0 {
 		app.recents = recent
 	}
 	for _, v := range app.recents {
 		vv := v
-		app.top.Add(widget.NewButton(vv, func() {
-			app.entry.SetText(vv)
-			app.button.Tapped(nil)
+		remark := vv.Remark
+		if remark == "" {
+			remark = vv.RoomId
+		}
+		app.list.Add(widget.NewButton(remark, func() {
+			app.submit(vv.RoomId)
 		}))
 	}
 }
 
-func (app *App) submit() {
-	roomId := strings.TrimSpace(app.entry.Text)
+func (app *App) submit(roomId string) {
 	if roomId == "" {
-		app.alert("请输入直播房间号")
+		roomId = strings.TrimSpace(app.roomId.Text)
+	}
+	if roomId == "" {
+		app.alert("请输入直播间地址或ID")
 		return
 	}
 	parse, err := url.Parse(roomId)
 	if err == nil && parse.Path != "" {
 		roomId = strings.Trim(parse.Path, "/")
 	}
+	remark := app.remark.Text
+	if remark == "" {
+		remark = roomId
+	}
 	app.button.Text = "查询中......"
 	app.button.Disable()
 	defer func() {
-		app.button.Text = "查询"
+		app.button.Text = "查询&打开"
 		app.button.Enable()
 	}()
-	for i, _ := range app.dataList {
-		app.list.Unselect(i)
-	}
-	app.dataList = []string{}
 	urls, err := app.api.GetRealUrl(roomId)
 	if err != nil {
 		app.alert(err.Error())
 		return
 	}
-	for _, v := range urls {
-		app.dataList = append(app.dataList, v.Url)
-	}
+	randUrl := urls[rand.Intn(len(urls)-1)]
 	var isExisted = false
 	for _, recent := range app.recents {
-		if recent == roomId {
+		if recent.RoomId == roomId {
 			isExisted = true
 			break
 		}
 	}
 	if !isExisted {
-		num := len(app.top.Objects)
-		// 最多保存最近8个记录
-		if num == 8 {
-			app.top.Remove(app.top.Objects[0])
-			app.recents = app.recents[num-7:]
+		num := len(app.list.Objects)
+		// 最多保存最近100个记录
+		if num == 100 {
+			app.list.Remove(app.list.Objects[0])
+			app.recents = app.recents[num-99:]
 		}
-		app.top.Add(widget.NewButton(roomId, func() {
-			app.entry.SetText(roomId)
+		app.list.Add(widget.NewButton(remark, func() {
+			app.roomId.SetText(remark)
 			app.button.Tapped(nil)
 		}))
-		app.recents = append(app.recents, roomId)
+		app.recents = append(app.recents, Room{RoomId: roomId, Remark: app.remark.Text})
 		app.saveRecent()
 	}
+	app.window.Clipboard().SetContent(randUrl.Url)
+	err = exec.Command("smplayer", randUrl.Url).Start()
+	if err != nil {
+		err = exec.Command("mpv", randUrl.Url).Start()
+	}
+	if err != nil {
+		app.alert("打开播放器失败，请确认是否安装smplayer、mpv，并确保在终端里面可以成功调用！")
+		app.alert("直播地址已复制到粘贴板，也可以手动打开播放器播放！")
+	}
+	time.Sleep(time.Second)
 }
 
 func (app *App) alert(msg string) {
 	info := dialog.NewInformation("提示", msg, app.window)
 	info.Show()
-	time.Sleep(time.Second)
-	info.Hide()
 }
 
 func (app *App) saveRecent() {
@@ -171,9 +167,9 @@ func (app *App) saveRecent() {
 	fyne.CurrentApp().Preferences().SetString("recents", string(text))
 }
 
-func (app *App) loadRecent() ([]string, error) {
+func (app *App) loadRecent() ([]Room, error) {
 	recents := fyne.CurrentApp().Preferences().String("recents")
-	var content []string
+	var content []Room
 	err := json.Unmarshal([]byte(recents), &content)
 	if err != nil {
 		return nil, err
