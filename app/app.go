@@ -13,24 +13,20 @@ import (
 	"math/rand"
 	"net/url"
 	"os/exec"
+	"sort"
 	"strings"
 	"time"
 )
 
 type App struct {
 	api     api.Huya
-	recents []Room
+	recents RoomList
 
-	window fyne.Window
-	roomId *widget.Entry
-	remark *widget.Entry
-	button *widget.Button
-	list   *fyne.Container
-}
-
-type Room struct {
-	RoomId string
-	Remark string
+	window  fyne.Window
+	roomId  *widget.Entry
+	remark  *widget.Entry
+	button  *widget.Button
+	history *fyne.Container
 }
 
 func New() *App {
@@ -39,30 +35,18 @@ func New() *App {
 	return &App{
 		api:     api.New(),
 		window:  a.NewWindow("Catya"),
-		recents: []Room{{"lpl", "LPL"}, {"s4k", "LPL 4K"}, {"991111", "TheShy"}},
+		history: container.NewVBox(),
 	}
 }
 
 func (app *App) Run() {
-	app.init()
-	app.window.SetContent(
-		container.NewBorder(
-			container.NewVBox(
-				app.roomId, app.remark,
-				container.NewGridWithColumns(3, layout.NewSpacer(), app.button, layout.NewSpacer()),
-				widget.NewSeparator(),
-			),
-			nil,
-			nil,
-			nil,
-			widget.NewCard("", "最近访问记录，双击可以快速打开：", container.NewGridWithRows(9, app.list)),
-		))
+	app.setUp()
 	app.window.Resize(fyne.NewSize(640, 480))
 	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
 
-func (app *App) init() {
+func (app *App) setUp() {
 	rand.Seed(time.Now().UnixNano())
 
 	app.roomId = widget.NewEntry()
@@ -76,21 +60,19 @@ func (app *App) init() {
 	app.button = widget.NewButton("查询&打开", func() {
 		app.submit("")
 	})
-	app.list = container.NewHBox()
-	recent, err := app.loadRecent()
-	if err == nil && len(recent) > 0 {
-		app.recents = recent
-	}
-	for _, v := range app.recents {
-		vv := v
-		remark := vv.Remark
-		if remark == "" {
-			remark = vv.RoomId
-		}
-		app.list.Add(widget.NewButton(remark, func() {
-			app.submit(vv.RoomId)
-		}))
-	}
+	app.setUpRecents()
+	app.window.SetContent(
+		container.NewBorder(
+			container.NewVBox(
+				app.roomId, app.remark,
+				container.NewGridWithColumns(3, layout.NewSpacer(), app.button, layout.NewSpacer()),
+				widget.NewSeparator(),
+			),
+			nil,
+			nil,
+			nil,
+			widget.NewCard("", "最近访问记录，双击可以快速打开：", app.history),
+		))
 }
 
 func (app *App) submit(roomId string) {
@@ -115,7 +97,21 @@ func (app *App) submit(roomId string) {
 		app.button.Text = "查询&打开"
 		app.button.Enable()
 	}()
-	urls, err := app.api.GetRealUrl(roomId)
+	app.openRoom(Room{roomId, remark, 0})
+}
+
+func (app *App) shotcut(room Room) {
+	app.button.Text = "查询中......"
+	app.button.Disable()
+	defer func() {
+		app.button.Text = "查询&打开"
+		app.button.Enable()
+	}()
+	app.openRoom(room)
+}
+
+func (app *App) openRoom(room Room) {
+	urls, err := app.api.GetRealUrl(room.Id)
 	if err != nil {
 		app.alert(err.Error())
 		return
@@ -123,25 +119,17 @@ func (app *App) submit(roomId string) {
 	randUrl := urls[rand.Intn(len(urls)-1)]
 	var isExisted = false
 	for _, recent := range app.recents {
-		if recent.RoomId == roomId {
+		if recent.Id == room.Id || recent.Remark == room.Remark {
+			recent.Count++
+			recent.Remark = room.Remark
 			isExisted = true
 			break
 		}
 	}
 	if !isExisted {
-		num := len(app.list.Objects)
-		// 最多保存最近100个记录
-		if num == 100 {
-			app.list.Remove(app.list.Objects[0])
-			app.recents = app.recents[num-99:]
-		}
-		app.list.Add(widget.NewButton(remark, func() {
-			app.roomId.SetText(remark)
-			app.button.Tapped(nil)
-		}))
-		app.recents = append(app.recents, Room{RoomId: roomId, Remark: app.remark.Text})
-		app.saveRecent()
+		app.recents = append(app.recents, &Room{Id: room.Id, Remark: room.Remark})
 	}
+	app.updateRecents()
 	app.window.Clipboard().SetContent(randUrl.Url)
 	err = exec.Command("smplayer", randUrl.Url).Start()
 	if err != nil {
@@ -151,7 +139,88 @@ func (app *App) submit(roomId string) {
 		app.alert("打开播放器失败，请确认是否安装smplayer、mpv，并确保在终端里面可以成功调用！")
 		app.alert("直播地址已复制到粘贴板，也可以手动打开播放器播放！")
 	}
+	go app.saveRecent()
 	time.Sleep(time.Second)
+}
+
+// 设置最近访问记录
+func (app *App) setUpRecents() {
+	recents, err := app.loadRecent()
+	if err != nil {
+		return
+	}
+	sort.Sort(recents)
+	pos := 0
+	length := float32(0.0)
+	list := make([]*fyne.Container, len(recents)/5+1)
+	for _, v := range recents {
+		vv := v
+		remark := vv.Remark
+		if remark == "" {
+			remark = vv.Id
+		}
+		bt := widget.NewButton(remark, func() {
+			app.shotcut(*vv)
+		})
+		if list[pos] == nil {
+			list[pos] = container.NewHBox()
+			app.history.Add(list[pos])
+		}
+		list[pos].Add(bt)
+		length += bt.Size().Width
+		if length >= 500 {
+			pos++
+			length = 0
+		}
+	}
+	app.recents = recents
+	app.saveRecent()
+}
+
+// 更新最近访问记录
+func (app *App) updateRecents() {
+	sort.Sort(app.recents)
+	pos := 0
+	length := float32(0.0)
+	list := make([]*fyne.Container, len(app.recents)/5+1)
+	for _, v := range app.history.Objects {
+		app.history.Remove(v)
+	}
+	for _, v := range app.recents {
+		vv := v
+		remark := vv.Remark
+		if remark == "" {
+			remark = vv.Id
+		}
+		bt := widget.NewButton(remark, func() {
+			app.shotcut(*vv)
+		})
+		if list[pos] == nil {
+			list[pos] = container.NewHBox()
+			app.history.Add(list[pos])
+		}
+		list[pos].Add(bt)
+		length += bt.Size().Width
+		if length >= 500 {
+			pos++
+			length = 0
+		}
+	}
+}
+
+// 加载最近访问记录配置
+func (app *App) loadRecent() (RoomList, error) {
+	recents := fyne.CurrentApp().Preferences().String("recents")
+	if len(recents) == 0 {
+		return RoomList{{"lpl", "LPL", 0}, {"s4k",
+			"LPL 4K", 0}, {"991111", "TheShy", 0}}, nil
+	}
+	var content []*Room
+	err := json.Unmarshal([]byte(recents), &content)
+	if err != nil {
+		return nil, err
+	}
+	return content, nil
 }
 
 func (app *App) alert(msg string) {
@@ -165,14 +234,4 @@ func (app *App) saveRecent() {
 		return
 	}
 	fyne.CurrentApp().Preferences().SetString("recents", string(text))
-}
-
-func (app *App) loadRecent() ([]Room, error) {
-	recents := fyne.CurrentApp().Preferences().String("recents")
-	var content []Room
-	err := json.Unmarshal([]byte(recents), &content)
-	if err != nil {
-		return nil, err
-	}
-	return content, nil
 }
