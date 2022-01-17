@@ -12,6 +12,7 @@ import (
 
 type Huya struct {
 	httpClient http.Client
+	cache      map[string][]ResultUrl
 }
 
 var ErrorNotExist = errors.New("未开播或不存在")
@@ -21,6 +22,7 @@ func New() Huya {
 		httpClient: http.Client{
 			Timeout: time.Second * 5,
 		},
+		cache: make(map[string][]ResultUrl, 20),
 	}
 }
 
@@ -29,7 +31,12 @@ type ResultUrl struct {
 	Url     string
 }
 
-func (r Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
+func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
+	// 直接从缓存里面取
+	cacheUrl, ok := r.cache[roomId]
+	if ok {
+		return cacheUrl, nil
+	}
 	roomUrl := "https://m.huya.com/" + roomId
 	request, err := http.NewRequest("GET", roomUrl, nil)
 	if err != nil {
@@ -44,14 +51,21 @@ func (r Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	}
 	defer response.Body.Close()
 	result, err := ioutil.ReadAll(response.Body)
-
+	if err != nil {
+		return nil, err
+	}
 	reg := regexp.MustCompile("<script> window.HNF_GLOBAL_INIT = (.*)</script>")
 	submatch := reg.FindStringSubmatch(string(result))
 
 	if submatch == nil || len(submatch) < 2 {
 		return nil, errors.New("查询失败")
 	}
-	return extractUrl(submatch[1])
+	resultUrl, err := extractUrl(submatch[1])
+	if err != nil {
+		return nil, err
+	}
+	r.cache[roomId] = resultUrl
+	return resultUrl, nil
 }
 
 func extractUrl(content string) ([]ResultUrl, error) {
@@ -70,6 +84,5 @@ func extractUrl(content string) ([]ResultUrl, error) {
 		})
 		return true
 	})
-
 	return result, nil
 }
