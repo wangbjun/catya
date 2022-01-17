@@ -10,6 +10,7 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
+	"log"
 	"math/rand"
 	"net/url"
 	"os/exec"
@@ -22,7 +23,7 @@ type App struct {
 	api     api.Huya
 	recents RoomList
 
-	window  fyne.Window
+	Window  fyne.Window
 	roomId  *widget.Entry
 	remark  *widget.Entry
 	button  *widget.Button
@@ -34,19 +35,12 @@ func New() *App {
 	a.Settings().SetTheme(&theme.MyTheme{})
 	return &App{
 		api:     api.New(),
-		window:  a.NewWindow("Catya"),
+		Window:  a.NewWindow("Catya"),
 		history: container.NewVBox(),
 	}
 }
 
-func (app *App) Run() {
-	app.setUp()
-	app.window.Resize(fyne.NewSize(640, 480))
-	app.window.CenterOnScreen()
-	app.window.ShowAndRun()
-}
-
-func (app *App) setUp() {
+func (app *App) SetUp() {
 	rand.Seed(time.Now().UnixNano())
 
 	app.roomId = widget.NewEntry()
@@ -60,8 +54,8 @@ func (app *App) setUp() {
 	app.button = widget.NewButton("查询&打开", func() {
 		app.submit("")
 	})
-	app.setUpRecents()
-	app.window.SetContent(
+	app.initRecents()
+	app.Window.SetContent(
 		container.NewBorder(
 			container.NewVBox(
 				app.roomId, app.remark,
@@ -73,6 +67,37 @@ func (app *App) setUp() {
 			nil,
 			widget.NewCard("", "最近访问记录，双击可以快速打开：", app.history),
 		))
+	go app.updateStatus()
+}
+
+// 自动更新直播间状态
+func (app *App) updateStatus() {
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("something happend: %s\n", err)
+		}
+	}()
+	ticker := time.NewTicker(time.Minute * 3)
+	for {
+		for _, v := range app.recents {
+			realUrl, err := app.api.GetRealUrl(v.Id)
+			if err != nil {
+				log.Printf("update live status error: %s => %s", v.Id, err)
+				v.Status = 0
+				continue
+			}
+			if len(realUrl) != 0 {
+				v.Status = 1
+				continue
+			}
+			v.Status = 0
+			time.Sleep(time.Millisecond * 300)
+		}
+		app.updateRecents()
+		app.Window.Content().Refresh()
+		log.Println("update live status finished")
+		<-ticker.C
+	}
 }
 
 func (app *App) submit(roomId string) {
@@ -97,10 +122,10 @@ func (app *App) submit(roomId string) {
 		app.button.Text = "查询&打开"
 		app.button.Enable()
 	}()
-	app.openRoom(Room{roomId, remark, 0})
+	app.openRoom(Room{Id: roomId, Remark: remark})
 }
 
-func (app *App) shotcut(room Room) {
+func (app *App) shortcut(room Room) {
 	app.button.Text = "查询中......"
 	app.button.Disable()
 	defer func() {
@@ -111,12 +136,7 @@ func (app *App) shotcut(room Room) {
 }
 
 func (app *App) openRoom(room Room) {
-	urls, err := app.api.GetRealUrl(room.Id)
-	if err != nil {
-		app.alert(err.Error())
-		return
-	}
-	randUrl := urls[rand.Intn(len(urls)-1)]
+	log.Printf("open room: %s", room.Id)
 	var isExisted = false
 	for _, recent := range app.recents {
 		if recent.Id == room.Id || recent.Remark == room.Remark {
@@ -129,8 +149,16 @@ func (app *App) openRoom(room Room) {
 	if !isExisted {
 		app.recents = append(app.recents, &Room{Id: room.Id, Remark: room.Remark})
 	}
-	app.updateRecents()
-	app.window.Clipboard().SetContent(randUrl.Url)
+	go app.updateRecents()
+	go app.saveRecent()
+	// 获取直播地址
+	urls, err := app.api.GetRealUrl(room.Id)
+	if err != nil {
+		app.alert(err.Error())
+		return
+	}
+	randUrl := urls[rand.Intn(len(urls)-1)]
+	app.Window.Clipboard().SetContent(randUrl.Url)
 	err = exec.Command("smplayer", randUrl.Url).Start()
 	if err != nil {
 		err = exec.Command("mpv", randUrl.Url).Start()
@@ -139,12 +167,11 @@ func (app *App) openRoom(room Room) {
 		app.alert("打开播放器失败，请确认是否安装smplayer、mpv，并确保在终端里面可以成功调用！")
 		app.alert("直播地址已复制到粘贴板，也可以手动打开播放器播放！")
 	}
-	go app.saveRecent()
 	time.Sleep(time.Second)
 }
 
 // 设置最近访问记录
-func (app *App) setUpRecents() {
+func (app *App) initRecents() {
 	recents, err := app.loadRecent()
 	if err != nil {
 		return
@@ -159,8 +186,8 @@ func (app *App) setUpRecents() {
 		if remark == "" {
 			remark = vv.Id
 		}
-		bt := widget.NewButton(remark, func() {
-			app.shotcut(*vv)
+		bt := widget.NewButtonWithIcon(remark, theme.ResourceOfflineSvg, func() {
+			app.shortcut(*vv)
 		})
 		if list[pos] == nil {
 			list[pos] = container.NewHBox()
@@ -183,8 +210,13 @@ func (app *App) updateRecents() {
 	pos := 0
 	length := float32(0.0)
 	list := make([]*fyne.Container, len(app.recents)/5+1)
-	for _, v := range app.history.Objects {
-		app.history.Remove(v)
+	for { // 清除旧记录
+		if len(app.history.Objects) == 0 {
+			break
+		}
+		for _, v := range app.history.Objects {
+			app.history.Remove(v)
+		}
 	}
 	for _, v := range app.recents {
 		vv := v
@@ -192,8 +224,12 @@ func (app *App) updateRecents() {
 		if remark == "" {
 			remark = vv.Id
 		}
-		bt := widget.NewButton(remark, func() {
-			app.shotcut(*vv)
+		statusIcon := theme.ResourceOfflineSvg
+		if vv.Status == 1 {
+			statusIcon = theme.ResourceOnlineSvg
+		}
+		bt := widget.NewButtonWithIcon(remark, statusIcon, func() {
+			app.shortcut(*vv)
 		})
 		if list[pos] == nil {
 			list[pos] = container.NewHBox()
@@ -212,8 +248,8 @@ func (app *App) updateRecents() {
 func (app *App) loadRecent() (RoomList, error) {
 	recents := fyne.CurrentApp().Preferences().String("recents")
 	if len(recents) == 0 {
-		return RoomList{{"lpl", "LPL", 0}, {"s4k",
-			"LPL 4K", 0}, {"991111", "TheShy", 0}}, nil
+		return RoomList{{Id: "lpl", Remark: "LPL"}, {Id: "s4k",
+			Remark: "LPL 4K"}, {Id: "991111", Remark: "TheShy"}}, nil
 	}
 	var content []*Room
 	err := json.Unmarshal([]byte(recents), &content)
@@ -224,8 +260,10 @@ func (app *App) loadRecent() (RoomList, error) {
 }
 
 func (app *App) alert(msg string) {
-	info := dialog.NewInformation("提示", msg, app.window)
+	info := dialog.NewInformation("提示", msg, app.Window)
 	info.Show()
+	time.Sleep(time.Second)
+	info.Hide()
 }
 
 func (app *App) saveRecent() {

@@ -4,6 +4,7 @@ type Room struct {
 	Id     string
 	Remark string
 	Count  int
+	Status int
 }
 
 type RoomList []*Room

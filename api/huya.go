@@ -14,10 +14,12 @@ type Huya struct {
 	httpClient http.Client
 }
 
+var ErrorNotExist = errors.New("未开播或不存在")
+
 func New() Huya {
 	return Huya{
 		httpClient: http.Client{
-			Timeout: time.Second * 10,
+			Timeout: time.Second * 5,
 		},
 	}
 }
@@ -56,7 +58,7 @@ func extractUrl(content string) ([]ResultUrl, error) {
 	parse := gjson.Parse(content)
 	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
 	if !streamInfo.Exists() || len(streamInfo.Array()) == 0 {
-		return nil, errors.New("未开播或不存在")
+		return nil, ErrorNotExist
 	}
 	var result []ResultUrl
 	streamInfo.ForEach(func(key, value gjson.Result) bool {
