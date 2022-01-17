@@ -94,6 +94,7 @@ func (app *App) updateStatus() {
 			time.Sleep(time.Millisecond * 300)
 		}
 		app.updateRecents()
+		app.saveRecent()
 		app.Window.Content().Refresh()
 		log.Println("update live status finished")
 		<-ticker.C
@@ -149,10 +150,8 @@ func (app *App) openRoom(room Room) {
 	if !isExisted {
 		app.recents = append(app.recents, &Room{Id: room.Id, Remark: room.Remark})
 	}
-	go app.updateRecents()
-	go app.saveRecent()
 	// 获取直播地址
-	urls, err := app.api.GetRealUrl(room.Id)
+	urls, err := app.api.GetRealUrlFromCache(room.Id)
 	if err != nil {
 		app.alert(err.Error())
 		return

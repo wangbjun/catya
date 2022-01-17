@@ -20,7 +20,7 @@ var ErrorNotExist = errors.New("未开播或不存在")
 func New() Huya {
 	return Huya{
 		httpClient: http.Client{
-			Timeout: time.Second * 5,
+			Timeout: time.Second * 3,
 		},
 		cache: make(map[string][]ResultUrl, 20),
 	}
@@ -31,12 +31,20 @@ type ResultUrl struct {
 	Url     string
 }
 
-func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
-	// 直接从缓存里面取
+// GetRealUrlFromCache 从缓存里面取
+func (r *Huya) GetRealUrlFromCache(roomId string) ([]ResultUrl, error) {
 	cacheUrl, ok := r.cache[roomId]
 	if ok {
 		return cacheUrl, nil
 	}
+	realUrl, err := r.GetRealUrl(roomId)
+	if err != nil {
+		return nil, err
+	}
+	return realUrl, nil
+}
+
+func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	roomUrl := "https://m.huya.com/" + roomId
 	request, err := http.NewRequest("GET", roomUrl, nil)
 	if err != nil {
@@ -60,12 +68,12 @@ func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	if submatch == nil || len(submatch) < 2 {
 		return nil, errors.New("查询失败")
 	}
-	resultUrl, err := extractUrl(submatch[1])
+	realUrl, err := extractUrl(submatch[1])
 	if err != nil {
 		return nil, err
 	}
-	r.cache[roomId] = resultUrl
-	return resultUrl, nil
+	r.cache[roomId] = realUrl
+	return realUrl, nil
 }
 
 func extractUrl(content string) ([]ResultUrl, error) {
