@@ -82,19 +82,18 @@ func (app *App) updateStatus() {
 		for _, v := range app.recents {
 			realUrl, err := app.api.GetRealUrl(v.Id)
 			if err != nil {
-				log.Printf("update live status error: %s => %s", v.Id, err)
-				v.Status = 0
+				log.Printf("update live status error: %s => %s", v.Remark, err)
 				continue
 			}
 			if len(realUrl) != 0 {
 				v.Status = 1
+				v.RealUrl = realUrl
 				continue
 			}
-			v.Status = 0
 			time.Sleep(time.Millisecond * 300)
 		}
+		sort.Sort(app.recents)
 		app.updateRecents()
-		app.saveRecent()
 		app.Window.Content().Refresh()
 		log.Println("update live status finished")
 		<-ticker.C
@@ -150,23 +149,38 @@ func (app *App) openRoom(room Room) {
 	if !isExisted {
 		app.recents = append(app.recents, &Room{Id: room.Id, Remark: room.Remark})
 	}
+	app.saveRecent()
+	app.updateRecents()
 	// 获取直播地址
-	urls, err := app.api.GetRealUrlFromCache(room.Id)
-	if err != nil {
-		app.alert(err.Error())
+	urls := app.getFromRecents(room.Id)
+	if urls == nil {
+		urls, _ = app.api.GetRealUrl(room.Id)
+	}
+	if urls == nil || len(urls) == 0 {
+		app.alert("未开播或不存在")
 		return
 	}
 	randUrl := urls[rand.Intn(len(urls)-1)]
 	app.Window.Clipboard().SetContent(randUrl.Url)
-	err = exec.Command("smplayer", randUrl.Url).Start()
+	err := exec.Command("smplayer", randUrl.Url).Start()
 	if err != nil {
 		err = exec.Command("mpv", randUrl.Url).Start()
 	}
 	if err != nil {
-		app.alert("打开播放器失败，请确认是否安装smplayer、mpv，并确保在终端里面可以成功调用！")
-		app.alert("直播地址已复制到粘贴板，也可以手动打开播放器播放！")
+		app.alert("直播地址已复制到粘贴板，可以手动打开播放器播放！")
+		app.alert("播放失败，请确认是否安装smplayer或mpv，并确保在终端可以调用！")
 	}
 	time.Sleep(time.Second)
+}
+
+// 获取roomId
+func (app *App) getFromRecents(roomId string) []api.ResultUrl {
+	for _, v := range app.recents {
+		if v.Id == roomId {
+			return v.RealUrl
+		}
+	}
+	return nil
 }
 
 // 设置最近访问记录
@@ -205,7 +219,6 @@ func (app *App) initRecents() {
 
 // 更新最近访问记录
 func (app *App) updateRecents() {
-	sort.Sort(app.recents)
 	pos := 0
 	length := float32(0.0)
 	list := make([]*fyne.Container, len(app.recents)/5+1)
@@ -261,8 +274,6 @@ func (app *App) loadRecent() (RoomList, error) {
 func (app *App) alert(msg string) {
 	info := dialog.NewInformation("提示", msg, app.Window)
 	info.Show()
-	time.Sleep(time.Second)
-	info.Hide()
 }
 
 func (app *App) saveRecent() {

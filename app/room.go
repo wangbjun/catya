@@ -1,10 +1,13 @@
 package app
 
+import "catya/api"
+
 type Room struct {
-	Id     string
-	Remark string
-	Count  int
-	Status int
+	Id      string          `json:"id"`
+	Remark  string          `json:"remark"`
+	Count   int             `json:"count"`
+	Status  int             `json:"-"`
+	RealUrl []api.ResultUrl `json:"-"`
 }
 
 type RoomList []*Room

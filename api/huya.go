@@ -12,7 +12,6 @@ import (
 
 type Huya struct {
 	httpClient http.Client
-	cache      map[string][]ResultUrl
 }
 
 var ErrorNotExist = errors.New("未开播或不存在")
@@ -20,28 +19,14 @@ var ErrorNotExist = errors.New("未开播或不存在")
 func New() Huya {
 	return Huya{
 		httpClient: http.Client{
-			Timeout: time.Second * 3,
+			Timeout: time.Second * 5,
 		},
-		cache: make(map[string][]ResultUrl, 20),
 	}
 }
 
 type ResultUrl struct {
 	CdnType string
 	Url     string
-}
-
-// GetRealUrlFromCache 从缓存里面取
-func (r *Huya) GetRealUrlFromCache(roomId string) ([]ResultUrl, error) {
-	cacheUrl, ok := r.cache[roomId]
-	if ok {
-		return cacheUrl, nil
-	}
-	realUrl, err := r.GetRealUrl(roomId)
-	if err != nil {
-		return nil, err
-	}
-	return realUrl, nil
 }
 
 func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
@@ -72,7 +57,6 @@ func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	if err != nil {
 		return nil, err
 	}
-	r.cache[roomId] = realUrl
 	return realUrl, nil
 }
 
