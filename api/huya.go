@@ -6,9 +6,12 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
-	"strings"
 	"time"
 )
+
+type LiveApi interface {
+	GetLiveUrl(string) ([]string, error)
+}
 
 type Huya struct {
 	httpClient http.Client
@@ -24,12 +27,8 @@ func New() Huya {
 	}
 }
 
-type ResultUrl struct {
-	CdnType string
-	Url     string
-}
-
-func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
+// GetLiveUrl 解析虎牙直播间地址
+func (r *Huya) GetLiveUrl(roomId string) ([]string, error) {
 	roomUrl := "https://m.huya.com/" + roomId
 	request, err := http.NewRequest("GET", roomUrl, nil)
 	if err != nil {
@@ -49,7 +48,6 @@ func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	}
 	reg := regexp.MustCompile("<script> window.HNF_GLOBAL_INIT = (.*)</script>")
 	submatch := reg.FindStringSubmatch(string(result))
-
 	if submatch == nil || len(submatch) < 2 {
 		return nil, errors.New("查询失败")
 	}
@@ -60,20 +58,16 @@ func (r *Huya) GetRealUrl(roomId string) ([]ResultUrl, error) {
 	return realUrl, nil
 }
 
-func extractUrl(content string) ([]ResultUrl, error) {
+func extractUrl(content string) ([]string, error) {
 	parse := gjson.Parse(content)
 	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
 	if !streamInfo.Exists() || len(streamInfo.Array()) == 0 {
 		return nil, ErrorNotExist
 	}
-	var result []ResultUrl
+	var result []string
 	streamInfo.ForEach(func(key, value gjson.Result) bool {
-		cdnType := strings.ToLower(value.Get("sCdnType").String())
 		urlPart := value.Get("sStreamName").String() + "." + value.Get("sFlvUrlSuffix").String() + "?" + value.Get("sFlvAntiCode").String()
-		result = append(result, ResultUrl{
-			CdnType: cdnType + "_flv",
-			Url:     value.Get("sFlvUrl").String() + "/" + urlPart,
-		})
+		result = append(result, value.Get("sFlvUrl").String()+"/"+urlPart)
 		return true
 	})
 	return result, nil

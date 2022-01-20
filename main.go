@@ -1,14 +1,12 @@
 package main
 
 import (
+	"catya/api"
 	"catya/app"
-	"fyne.io/fyne/v2"
 )
 
 func main() {
-	huya := app.New()
-	huya.SetUp()
-	huya.Window.Resize(fyne.NewSize(640, 480))
-	huya.Window.CenterOnScreen()
-	huya.Window.ShowAndRun()
+	huya := api.New()
+	application := app.New(&huya)
+	application.Run()
 }
