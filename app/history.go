@@ -28,6 +28,8 @@ func (r *History) Load() {
 	}
 	r.rooms = rooms
 
+	sort.Sort(r.rooms)
+
 	r.refreshWidget()
 
 	go r.updateStatus()
@@ -128,7 +130,7 @@ func (r *History) updateStatus() {
 			}
 			room.Url = liveUrl
 			room.Status = 1
-			if i%5 == 0 {
+			if i%5 == 0 || i == len(r.rooms)-1 {
 				r.update()
 				time.Sleep(time.Millisecond * 200)
 			}

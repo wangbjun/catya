@@ -20,7 +20,7 @@ import (
 type App struct {
 	fyne         fyne.App
 	api          api.LiveApi
-	histroy      History
+	history      History
 	window       fyne.Window
 	inputRoom    *widget.Entry
 	inputRemark  *widget.Entry
@@ -37,7 +37,7 @@ func New(api api.LiveApi) *App {
 		window:      catya.NewWindow("Catya"),
 		historyList: container.NewVBox(),
 	}
-	application.histroy = History{app: application}
+	application.history = History{app: application}
 	return application
 }
 
@@ -64,7 +64,7 @@ func (app *App) setUp() {
 	app.submitButton = widget.NewButton("查询&打开", func() {
 		app.submit("")
 	})
-	app.histroy.Load()
+	app.history.Load()
 	app.window.SetContent(
 		container.NewBorder(
 			container.NewVBox(
@@ -117,7 +117,7 @@ func (app *App) submitHistory(room Room) {
 func (app *App) open(room Room) {
 	log.Printf("open room: %s", room.Remark)
 	// 获取直播地址
-	urls := app.histroy.Get(room.Id)
+	urls := app.history.Get(room.Id)
 	if urls == nil {
 		urls, _ = app.api.GetLiveUrl(room.Id)
 	}
@@ -125,7 +125,7 @@ func (app *App) open(room Room) {
 		app.alert("未开播或不存在")
 		return
 	}
-	app.histroy.Add(room)
+	app.history.Add(room)
 	randUrl := urls[rand.Intn(len(urls)-1)]
 	app.window.Clipboard().SetContent(randUrl)
 	err := exec.Command("smplayer", randUrl).Start()
