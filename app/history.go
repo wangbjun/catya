@@ -3,8 +3,6 @@ package app
 import (
 	"catya/theme"
 	"encoding/json"
-	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/widget"
 	"log"
 	"sort"
@@ -30,7 +28,7 @@ func (r *History) Load() {
 
 	sort.Sort(r.rooms)
 
-	r.refreshWidget()
+	r.updateHistory()
 
 	go r.updateStatus()
 }
@@ -73,15 +71,10 @@ func (r *History) update() {
 			r.app.historyList.Remove(v)
 		}
 	}
-	r.refreshWidget()
+	r.updateHistory()
 }
 
-func (r *History) refreshWidget() {
-	var (
-		index = 0
-		width = 0.0
-		list  = make([]*fyne.Container, len(r.rooms))
-	)
+func (r *History) updateHistory() {
 	for _, v := range r.rooms {
 		vv := v
 		name := vv.Remark
@@ -95,16 +88,8 @@ func (r *History) refreshWidget() {
 		bt := widget.NewButtonWithIcon(name, statusIcon, func() {
 			r.app.submitHistory(*vv)
 		})
-		if list[index] == nil {
-			list[index] = container.NewHBox()
-			r.app.historyList.Add(list[index])
-		}
-		list[index].Add(bt)
-		width += float64(bt.Size().Width)
-		if width >= 500 {
-			index++
-			width = 0
-		}
+
+		r.app.historyList.Add(bt)
 	}
 	r.app.window.Content().Refresh()
 }

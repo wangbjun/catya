@@ -35,7 +35,7 @@ func New(api api.LiveApi) *App {
 		api:         api,
 		fyne:        catya,
 		window:      catya.NewWindow("Catya"),
-		historyList: container.NewVBox(),
+		historyList: container.New(NewHistoryLayout()),
 	}
 	application.history = History{app: application}
 	return application
@@ -47,7 +47,7 @@ func init() {
 
 func (app *App) Run() {
 	app.setUp()
-	app.window.Resize(fyne.NewSize(640, 480))
+	app.window.Resize(fyne.NewSize(640, 420))
 	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
