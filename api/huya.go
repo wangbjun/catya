@@ -10,14 +10,12 @@ import (
 )
 
 type LiveApi interface {
-	GetLiveUrl(string) ([]string, error)
+	GetLiveUrl(string) (*Room, error)
 }
 
 type Huya struct {
 	httpClient http.Client
 }
-
-var ErrorNotExist = errors.New("未开播或不存在")
 
 func New() Huya {
 	return Huya{
@@ -28,7 +26,7 @@ func New() Huya {
 }
 
 // GetLiveUrl 解析虎牙直播间地址
-func (r *Huya) GetLiveUrl(roomId string) ([]string, error) {
+func (r *Huya) GetLiveUrl(roomId string) (*Room, error) {
 	roomUrl := "https://m.huya.com/" + roomId
 	request, err := http.NewRequest("GET", roomUrl, nil)
 	if err != nil {
@@ -51,24 +49,21 @@ func (r *Huya) GetLiveUrl(roomId string) ([]string, error) {
 	if submatch == nil || len(submatch) < 2 {
 		return nil, errors.New("查询失败")
 	}
-	realUrl, err := extractUrl(submatch[1])
-	if err != nil {
-		return nil, err
-	}
-	return realUrl, nil
+	return extractInfo(submatch[1])
 }
 
-func extractUrl(content string) ([]string, error) {
+func extractInfo(content string) (*Room, error) {
 	parse := gjson.Parse(content)
 	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
-	if !streamInfo.Exists() || len(streamInfo.Array()) == 0 {
-		return nil, ErrorNotExist
-	}
-	var result []string
+	nickName := parse.Get("roomInfo.tProfileInfo.sNick").String()
+	var urls []string
 	streamInfo.ForEach(func(key, value gjson.Result) bool {
 		urlPart := value.Get("sStreamName").String() + "." + value.Get("sFlvUrlSuffix").String() + "?" + value.Get("sFlvAntiCode").String()
-		result = append(result, value.Get("sFlvUrl").String()+"/"+urlPart)
+		urls = append(urls, value.Get("sFlvUrl").String()+"/"+urlPart)
 		return true
 	})
-	return result, nil
+	return &Room{
+		Urls: urls,
+		Name: nickName,
+	}, nil
 }

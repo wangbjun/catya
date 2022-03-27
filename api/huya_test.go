@@ -7,11 +7,9 @@ import (
 
 func TestGetRealUrl(t *testing.T) {
 	huya := New()
-	urls, err := huya.GetRealUrl("kaerlol")
+	roomInfo, err := huya.GetLiveUrl("lpl")
 	if err != nil {
 		panic(err)
 	}
-	for _, v := range urls {
-		fmt.Printf("%v\n", v.Url)
-	}
+	fmt.Printf("%v\n", roomInfo)
 }

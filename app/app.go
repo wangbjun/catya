@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
-	"log"
 	"math/rand"
 	"net/url"
 	"os/exec"
@@ -23,7 +22,7 @@ type App struct {
 	history      History
 	window       fyne.Window
 	inputRoom    *widget.Entry
-	inputRemark  *widget.Entry
+	inputName    *widget.Entry
 	submitButton *widget.Button
 	historyList  *fyne.Container
 }
@@ -47,35 +46,38 @@ func init() {
 
 func (app *App) Run() {
 	app.setUp()
-	app.window.Resize(fyne.NewSize(640, 420))
+	app.window.Resize(fyne.NewSize(649, 420))
 	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
 
 func (app *App) setUp() {
+	app.inputName = widget.NewEntry()
+	app.inputName.PlaceHolder = "请输入直播间备注名称，可选"
 	app.inputRoom = widget.NewEntry()
 	app.inputRoom.PlaceHolder = "请输入直播间地址或ID，比如：https://www.huya.com/991111、991111"
 	app.inputRoom.OnSubmitted = func(roomId string) {
 		app.submit(roomId)
+		app.inputRoom.SetText("")
 	}
-	app.inputRemark = widget.NewEntry()
-	app.inputRemark.PlaceHolder = "可选备注，比如：TheShy"
-
 	app.submitButton = widget.NewButton("查询&打开", func() {
 		app.submit("")
+		app.inputRoom.SetText("")
+		app.inputName.SetText("")
 	})
 	app.history.Load()
 	app.window.SetContent(
 		container.NewBorder(
 			container.NewVBox(
-				app.inputRoom, app.inputRemark,
+				app.inputRoom,
+				app.inputName,
 				container.NewGridWithColumns(3, layout.NewSpacer(), app.submitButton, layout.NewSpacer()),
 				widget.NewSeparator(),
 			),
 			nil,
 			nil,
 			nil,
-			widget.NewCard("", "最近访问记录，双击可以快速打开：", app.historyList),
+			app.historyList,
 		))
 }
 
@@ -91,44 +93,34 @@ func (app *App) submit(roomId string) {
 	if err == nil && parse.Path != "" {
 		roomId = strings.Trim(parse.Path, "/")
 	}
-	remark := app.inputRemark.Text
-	if remark == "" {
-		remark = roomId
-	}
 	app.submitButton.Text = "查询中......"
 	app.submitButton.Disable()
 	defer func() {
 		app.submitButton.Text = "查询&打开"
 		app.submitButton.Enable()
 	}()
-	app.open(Room{Id: roomId, Remark: remark})
-}
-
-func (app *App) submitHistory(room Room) {
-	app.submitButton.Text = "查询中......"
-	app.submitButton.Disable()
-	defer func() {
-		app.submitButton.Text = "查询&打开"
-		app.submitButton.Enable()
-	}()
-	app.open(room)
-}
-
-func (app *App) open(room Room) {
-	log.Printf("open room: %s", room.Remark)
-	// 获取直播地址
-	urls := app.history.Get(room.Id)
-	if urls == nil {
-		urls, _ = app.api.GetLiveUrl(room.Id)
+	roomInfo := app.history.Get(roomId)
+	if roomInfo == nil {
+		roomInfo, err = app.api.GetLiveUrl(roomId)
+		if err != nil {
+			app.alert("查询失败")
+			return
+		}
 	}
-	if urls == nil || len(urls) == 0 {
+	roomInfo.Id = roomId
+	if app.inputName.Text != "" {
+		roomInfo.Name = app.inputName.Text
+	}
+	if roomInfo.Name != "" {
+		app.history.Add(roomInfo)
+	}
+	if len(roomInfo.Urls) == 0 {
 		app.alert("未开播或不存在")
 		return
 	}
-	app.history.Add(room)
-	randUrl := urls[rand.Intn(len(urls)-1)]
+	randUrl := roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
 	app.window.Clipboard().SetContent(randUrl)
-	err := exec.Command("smplayer", randUrl).Start()
+	err = exec.Command("smplayer", randUrl).Start()
 	if err != nil {
 		err = exec.Command("mpv", randUrl).Start()
 	}

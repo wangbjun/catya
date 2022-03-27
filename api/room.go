@@ -1,11 +1,11 @@
-package app
+package api
 
 type Room struct {
 	Id     string   `json:"id"`
-	Remark string   `json:"remark"`
+	Name   string   `json:"name"`
 	Count  int      `json:"count"`
 	Status int      `json:"-"`
-	Url    []string `json:"-"`
+	Urls   []string `json:"-"`
 }
 
 type Rooms []*Room

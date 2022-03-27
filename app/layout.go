@@ -15,7 +15,7 @@ func NewHistoryLayout() *HistoryLayout {
 }
 
 func (g *HistoryLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
-	x, y := float32(0), float32(0)
+	x, y, z := float32(0), float32(0), float32(160)
 	for i, child := range objects {
 		if !child.Visible() {
 			continue
@@ -24,15 +24,15 @@ func (g *HistoryLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 			g.height = 0
 		}
 		child.Move(fyne.NewPos(x, y))
-		x += child.MinSize().Width
+		x += z
 		if x >= size.Width {
 			x = 0
 			y += child.MinSize().Height
 			child.Move(fyne.NewPos(x, y))
-			x += child.MinSize().Width
+			x += z
 			g.height += child.MinSize().Height
 		}
-		child.Resize(fyne.NewSize(child.MinSize().Width, 36))
+		child.Resize(fyne.NewSize(z, 36))
 	}
 }
 
