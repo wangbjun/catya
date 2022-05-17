@@ -104,7 +104,7 @@ func (r *History) updateStatus() {
 			log.Printf("something error happend: %s\n", err)
 		}
 	}()
-	ticker := time.NewTicker(time.Minute * 2)
+	ticker := time.NewTicker(time.Minute * 1)
 	for {
 		for i, room := range r.rooms {
 			roomInfo, err := r.app.api.GetLiveUrl(room.Id)
@@ -118,9 +118,9 @@ func (r *History) updateStatus() {
 			} else {
 				room.Status = 0
 			}
+			log.Printf("update status success: [%s]", room.Name)
 			if i%5 == 0 || i == len(r.rooms)-1 {
 				r.update()
-				time.Sleep(time.Millisecond * 200)
 			}
 		}
 		sort.Sort(r.rooms)

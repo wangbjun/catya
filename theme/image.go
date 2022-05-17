@@ -1,6 +1,6 @@
 package theme
 
-import "fyne.io/fyne"
+import "fyne.io/fyne/v2"
 
 var ResourceOnlineSvg = &fyne.StaticResource{
 	StaticName: "online.svg",
