@@ -104,7 +104,7 @@ func (r *History) updateStatus() {
 			log.Printf("something error happend: %s\n", err)
 		}
 	}()
-	ticker := time.NewTicker(time.Minute * 1)
+	ticker := time.NewTicker(time.Minute * 3)
 	for {
 		for i, room := range r.rooms {
 			roomInfo, err := r.app.api.GetLiveUrl(room.Id)
