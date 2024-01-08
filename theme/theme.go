@@ -12,7 +12,7 @@ var _ fyne.Theme = (*MyTheme)(nil)
 
 // Font return bundled font resource
 func (*MyTheme) Font(s fyne.TextStyle) fyne.Resource {
-	return resourceWqyMicroheiTtc
+	return resourceMsyhTtf
 }
 func (*MyTheme) Color(n fyne.ThemeColorName, v fyne.ThemeVariant) color.Color {
 	return theme.DefaultTheme().Color(n, v)

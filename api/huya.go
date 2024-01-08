@@ -1,14 +1,11 @@
 package api
 
 import (
-	"crypto/md5"
 	"encoding/base64"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"github.com/tidwall/gjson"
-	"io/ioutil"
-	"math/rand"
+	"io"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -16,10 +13,6 @@ import (
 	"strings"
 	"time"
 )
-
-type LiveApi interface {
-	GetLiveUrl(string) (*Room, error)
-}
 
 type Huya struct {
 	httpClient http.Client
@@ -33,8 +26,8 @@ func New() Huya {
 	}
 }
 
-// GetLiveUrl 解析虎牙直播间地址
-func (r *Huya) GetLiveUrl(roomId string) (*Room, error) {
+// GetRealUrl 解析虎牙直播间地址
+func (r *Huya) GetRealUrl(roomId string) (*Room, error) {
 	roomUrl := "https://m.huya.com/" + roomId
 	request, err := http.NewRequest("GET", roomUrl, nil)
 	if err != nil {
@@ -48,16 +41,16 @@ func (r *Huya) GetLiveUrl(roomId string) (*Room, error) {
 		return nil, err
 	}
 	defer response.Body.Close()
-	result, err := ioutil.ReadAll(response.Body)
+	result, err := io.ReadAll(response.Body)
 	if err != nil {
 		return nil, err
 	}
 	reg := regexp.MustCompile("<script> window.HNF_GLOBAL_INIT = (.*)</script>")
-	submatch := reg.FindStringSubmatch(string(result))
-	if submatch == nil || len(submatch) < 2 {
+	matches := reg.FindStringSubmatch(string(result))
+	if matches == nil || len(matches) < 2 {
 		return nil, errors.New("查询失败")
 	}
-	return extractInfo(submatch[1])
+	return extractInfo(matches[1])
 }
 
 func extractInfo(content string) (*Room, error) {
@@ -70,7 +63,7 @@ func extractInfo(content string) (*Room, error) {
 			value.Get("sFlvUrl").String(),
 			value.Get("sStreamName").String(),
 			value.Get("sFlvUrlSuffix").String(),
-			parseAntiCode(value.Get("sHlsAntiCode").String(), getAnonymousUid(), value.Get("sStreamName").String()))
+			parseAntiCode(value.Get("sFlvAntiCode").String(), value.Get("sStreamName").String()))
 		urls = append(urls, urlStr)
 		return true
 	})
@@ -80,53 +73,23 @@ func extractInfo(content string) (*Room, error) {
 	}, nil
 }
 
-func parseAntiCode(anticode, uid, streamName string) string {
-	qr, err := url.ParseQuery(anticode)
+func parseAntiCode(antiCode, streamName string) string {
+	qr, err := url.ParseQuery(antiCode)
 	if err != nil {
 		return ""
 	}
-	uidInt, _ := strconv.Atoi(uid)
-	qr.Set("ver", "1")
-	qr.Set("sv", "2110211124")
-	qr.Set("seqid", strconv.FormatInt(time.Now().Unix()*1000+int64(uidInt), 10))
-	qr.Set("uid", uid)
-	qr.Set("uuid", strconv.Itoa(getUuid()))
-	ss := MD5([]byte(fmt.Sprintf("%s|%s|%s", qr.Get("seqid"), qr.Get("ctype"), qr.Get("t"))))
+
+	t := "0"
+	f := strconv.FormatInt(time.Now().UnixNano()/100, 10)
+	wsTime := qr.Get("wsTime")
 
 	decodeString, _ := base64.StdEncoding.DecodeString(qr.Get("fm"))
 	fm := string(decodeString)
-	fm = strings.ReplaceAll(fm, "$0", qr.Get("uid"))
+	fm = strings.ReplaceAll(fm, "$0", t)
 	fm = strings.ReplaceAll(fm, "$1", streamName)
-	fm = strings.ReplaceAll(fm, "$2", ss)
-	fm = strings.ReplaceAll(fm, "$3", qr.Get("wsTime"))
+	fm = strings.ReplaceAll(fm, "$2", f)
+	fm = strings.ReplaceAll(fm, "$3", wsTime)
 
-	qr.Del("fm")
-	qr.Set("wsSecret", MD5([]byte(fm)))
-	if qr.Has("txyp") {
-		qr.Del("txyp")
-	}
-	return qr.Encode()
-}
-
-func getAnonymousUid() string {
-	urlStr := "https://udblgn.huya.com/web/anonymousLogin"
-	body := "{\n        \"appId\": 5002,\n        \"byPass\": 3,\n        \"context\": \"\",\n        \"version\": \"2.4\",\n        \"data\": {}\n    }"
-	resp, err := http.Post(urlStr, "application/json", strings.NewReader(body))
-	if err != nil {
-		return ""
-	}
-	result, _ := ioutil.ReadAll(resp.Body)
-	return gjson.Parse(string(result)).Get("data.uid").String()
-}
-
-func getUuid() int {
-	now := time.Now().Unix()
-	random := int64(rand.Intn(1000))
-	return int((now%10000000000*1000 + random) % 4294967295)
-}
-
-func MD5(str []byte) string {
-	h := md5.New()
-	h.Write(str)
-	return hex.EncodeToString(h.Sum(nil))
+	return fmt.Sprintf("wsSecret=%s&wsTime=%s&u=%s&seqid=%s&txyp=%s&fs=%s&sphdcdn=%s&sphdDC=%s&sphd=%s&u=0&t=100&ratio=0",
+		MD5([]byte(fm)), wsTime, t, f, qr.Get("txyp"), qr.Get("fs"), qr.Get("sphdcdn"), qr.Get("sphdDC"), qr.Get("sphd"))
 }

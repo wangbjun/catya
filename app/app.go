@@ -13,7 +13,6 @@ import (
 	"net/url"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 type App struct {
@@ -38,10 +37,6 @@ func New(api api.LiveApi) *App {
 	}
 	application.history = History{app: application}
 	return application
-}
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
 }
 
 func (app *App) Run() {
@@ -101,7 +96,7 @@ func (app *App) submit(roomId string) {
 	}()
 	roomInfo := app.history.Get(roomId)
 	if roomInfo == nil {
-		roomInfo, err = app.api.GetLiveUrl(roomId)
+		roomInfo, err = app.api.GetRealUrl(roomId)
 		if err != nil {
 			app.alert("查询失败")
 			return
@@ -118,13 +113,18 @@ func (app *App) submit(roomId string) {
 		app.alert("未开播或不存在")
 		return
 	}
-	randUrl := roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
-	app.window.Clipboard().SetContent(randUrl)
+	//随机取一个地址
+	randUrl := roomInfo.Urls[0]
+	if len(roomInfo.Urls) > 1 {
+		randUrl = roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
+	}
+
 	err = exec.Command("smplayer", randUrl).Start()
 	if err != nil {
 		err = exec.Command("mpv", randUrl).Start()
 	}
 	if err != nil {
+		app.window.Clipboard().SetContent(randUrl)
 		app.alert("直播地址已复制到粘贴板，可以手动打开播放器播放！")
 		app.alert("播放失败，请确认是否安装smplayer或mpv，并确保在终端可以调用！")
 	}
