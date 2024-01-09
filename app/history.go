@@ -2,9 +2,11 @@ package app
 
 import (
 	"catya/api"
-	"catya/theme"
 	"encoding/json"
-	"fyne.io/fyne/v2/widget"
+	"fmt"
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/canvas"
+	"fyne.io/fyne/v2/storage"
 	"log"
 	"sort"
 	"time"
@@ -16,8 +18,8 @@ type History struct {
 	rooms api.Rooms
 }
 
-// Load 加载历史访问记录
-func (r *History) Load() {
+// LoadConfig 加载历史访问记录
+func (r *History) LoadConfig() {
 	rooms := api.Rooms{{Id: "lpl", Name: "LPL赛事"}, {Id: "991111", Name: "TheShy"}}
 	config := r.app.fyne.Preferences().String("recents")
 	if len(config) != 0 {
@@ -28,9 +30,7 @@ func (r *History) Load() {
 	}
 	r.rooms = rooms
 
-	sort.Sort(r.rooms)
-
-	r.updateHistory()
+	r.update()
 
 	go r.updateStatus()
 }
@@ -46,10 +46,10 @@ func (r *History) Add(room *api.Room) {
 		}
 	}
 	if !isExisted {
-		r.rooms = append(r.rooms, &api.Room{Id: room.Id, Name: room.Name, Status: 1})
+		room.Status = 1
+		r.rooms = append(r.rooms, room)
+		r.update()
 	}
-	r.update()
-	r.save()
 }
 
 // Get 获取room信息
@@ -62,39 +62,49 @@ func (r *History) Get(roomId string) *api.Room {
 	return nil
 }
 
-// update 更新访问记录
-func (r *History) update() {
-	for { // 清除旧记录
-		if len(r.app.historyList.Objects) == 0 {
-			break
+// Delete 删除一个room信息
+func (r *History) Delete(roomId string) {
+	var result = api.Rooms{}
+	for _, v := range r.rooms {
+		if v.Id == roomId {
+			continue
 		}
-		for _, v := range r.app.historyList.Objects {
-			r.app.historyList.Remove(v)
-		}
+		result = append(result, v)
 	}
-	r.updateHistory()
+	r.rooms = result
 }
 
-func (r *History) updateHistory() {
-	for _, v := range r.rooms {
-		vv := v
-		name := vv.Name
+func (r *History) update() {
+	r.app.historyList.RemoveAll()
+	for _, room := range r.rooms {
+		name := room.Name
 		if name == "" {
-			name = vv.Id
-		}
-		statusIcon := theme.ResourceOfflineSvg
-		if vv.Status == 1 {
-			statusIcon = theme.ResourceOnlineSvg
+			name = room.Id
 		}
 		if utf8.RuneCountInString(name) > 8 {
 			name = string([]rune(name)[:8]) + "..."
 		}
-		bt := widget.NewButtonWithIcon(name, statusIcon, func() {
-			r.app.submit(vv.Id)
+		uri, err := storage.ParseURI(room.Screenshot)
+		if err != nil {
+			fmt.Printf("parse image url failed:%s\n", err)
+			continue
+		}
+		image := canvas.NewImageFromURI(uri)
+		image.FillMode = canvas.ImageFillOriginal
+
+		roomId := room.Id
+		card := NewTappedCard(name, room.Description, image, func() {
+			r.app.submit(roomId)
+		}, func() {
+			r.app.remove(roomId)
 		})
-		bt.Alignment = widget.ButtonAlignLeading
-		r.app.historyList.Add(bt)
+		card.Resize(fyne.Size{
+			Width:  255,
+			Height: 200,
+		})
+		r.app.historyList.Add(card)
 	}
+	r.app.historyList.Refresh()
 }
 
 // 自动更新直播间状态
@@ -104,7 +114,7 @@ func (r *History) updateStatus() {
 			log.Printf("something error happend: %s\n", err)
 		}
 	}()
-	ticker := time.NewTicker(time.Minute * 5)
+	ticker := time.NewTicker(time.Minute * 1)
 	for {
 		for i, room := range r.rooms {
 			roomInfo, err := r.app.api.GetRealUrl(room.Id)
@@ -113,17 +123,20 @@ func (r *History) updateStatus() {
 				continue
 			}
 			room.Urls = roomInfo.Urls
+			room.Screenshot = roomInfo.Screenshot
+			room.Description = roomInfo.Description
 			if len(roomInfo.Urls) > 0 {
 				room.Status = 1
 			} else {
 				room.Status = 0
 			}
 			log.Printf("update status success: [%s]", room.Name)
-			if i%5 == 0 || i == len(r.rooms)-1 {
+			if len(r.rooms) > 10 || (i+1)%10 == 0 {
 				r.update()
 			}
 		}
 		sort.Sort(r.rooms)
+		r.update()
 		r.save()
 		<-ticker.C
 	}
@@ -136,5 +149,4 @@ func (r *History) save() {
 		return
 	}
 	r.app.fyne.Preferences().SetString("recents", string(text))
-	r.app.window.Content().Refresh()
 }

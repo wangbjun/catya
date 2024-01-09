@@ -55,8 +55,18 @@ func (r *Huya) GetRealUrl(roomId string) (*Room, error) {
 
 func extractInfo(content string) (*Room, error) {
 	parse := gjson.Parse(content)
+	var (
+		nickName    = parse.Get("roomInfo.tProfileInfo.sNick").String()
+		description = parse.Get("roomInfo.tLiveInfo.sIntroduction").String()
+		screenshot  = parse.Get("roomInfo.tLiveInfo.sScreenshot").String()
+	)
+	if description == "" {
+		description = "主播暂不在直播哦～"
+	}
+	if screenshot == "" {
+		screenshot = "https://a.msstatic.com/huya/main/assets/img/default/338x190.jpg"
+	}
 	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
-	nickName := parse.Get("roomInfo.tProfileInfo.sNick").String()
 	var urls []string
 	streamInfo.ForEach(func(key, value gjson.Result) bool {
 		urlStr := fmt.Sprintf("%s/%s.%s?%s",
@@ -68,8 +78,10 @@ func extractInfo(content string) (*Room, error) {
 		return true
 	})
 	return &Room{
-		Urls: urls,
-		Name: nickName,
+		Urls:        urls,
+		Name:        nickName,
+		Screenshot:  screenshot,
+		Description: description,
 	}, nil
 }
 

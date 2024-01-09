@@ -40,8 +40,9 @@ func New(api api.LiveApi) *App {
 }
 
 func (app *App) Run() {
+	app.history.LoadConfig()
 	app.setUp()
-	app.window.Resize(fyne.NewSize(649, 420))
+	app.window.Resize(fyne.NewSize(1025, 725))
 	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
@@ -60,7 +61,6 @@ func (app *App) setUp() {
 		app.inputRoom.SetText("")
 		app.inputName.SetText("")
 	})
-	app.history.Load()
 	app.window.SetContent(
 		container.NewBorder(
 			container.NewVBox(
@@ -106,11 +106,13 @@ func (app *App) submit(roomId string) {
 	if app.inputName.Text != "" {
 		roomInfo.Name = app.inputName.Text
 	}
-	if roomInfo.Name != "" {
-		app.history.Add(roomInfo)
+	if roomInfo.Name == "" {
+		app.alert("直播间不存在")
+		return
 	}
+	app.history.Add(roomInfo)
 	if len(roomInfo.Urls) == 0 {
-		app.alert("未开播或不存在")
+		app.alert("主播暂未开播")
 		return
 	}
 	//随机取一个地址
@@ -119,15 +121,21 @@ func (app *App) submit(roomId string) {
 		randUrl = roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
 	}
 
-	err = exec.Command("smplayer", randUrl).Start()
+	exec.Command("killall", "mpv").Run()
+	err = exec.Command("mpv", "--title="+roomInfo.Name, randUrl).Start()
 	if err != nil {
-		err = exec.Command("mpv", randUrl).Start()
+		err = exec.Command("smplayer", randUrl).Start()
 	}
 	if err != nil {
 		app.window.Clipboard().SetContent(randUrl)
 		app.alert("直播地址已复制到粘贴板，可以手动打开播放器播放！")
 		app.alert("播放失败，请确认是否安装smplayer或mpv，并确保在终端可以调用！")
 	}
+}
+
+func (app *App) remove(roomId string) {
+	app.history.Delete(roomId)
+	app.history.update()
 }
 
 func (app *App) alert(msg string) {

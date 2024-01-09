@@ -28,6 +28,37 @@ func (*MyTheme) Icon(n fyne.ThemeIconName) fyne.Resource {
 	return theme.DefaultTheme().Icon(n)
 }
 
-func (*MyTheme) Size(n fyne.ThemeSizeName) float32 {
-	return theme.DefaultTheme().Size(n)
+func (*MyTheme) Size(s fyne.ThemeSizeName) float32 {
+	switch s {
+	case theme.SizeNameSeparatorThickness:
+		return 1
+	case theme.SizeNameInlineIcon:
+		return 20
+	case theme.SizeNameInnerPadding:
+		return 8
+	case theme.SizeNameLineSpacing:
+		return 4
+	case theme.SizeNamePadding:
+		return 2
+	case theme.SizeNameScrollBar:
+		return 16
+	case theme.SizeNameScrollBarSmall:
+		return 3
+	case theme.SizeNameText:
+		return 14
+	case theme.SizeNameHeadingText:
+		return 18
+	case theme.SizeNameSubHeadingText:
+		return 18
+	case theme.SizeNameCaptionText:
+		return 11
+	case theme.SizeNameInputBorder:
+		return 1
+	case theme.SizeNameInputRadius:
+		return 5
+	case theme.SizeNameSelectionRadius:
+		return 3
+	default:
+		return 0
+	}
 }
