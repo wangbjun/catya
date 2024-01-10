@@ -18,27 +18,31 @@ type History struct {
 	rooms api.Rooms
 }
 
-// LoadConfig 加载历史访问记录
-func (r *History) LoadConfig() {
-	rooms := api.Rooms{{Id: "lpl", Name: "LPL赛事"}, {Id: "991111", Name: "TheShy"}}
-	config := r.app.fyne.Preferences().String("recents")
-	if len(config) != 0 {
-		err := json.Unmarshal([]byte(config), &rooms)
+func NewHistory(app *App) *History {
+	return &History{app: app}
+}
+
+// Init 加载历史访问记录
+func (m *History) Init() {
+	config := m.app.fyne.Preferences().String(preferenceKeyHistory)
+	if config == "" {
+		m.rooms = api.Rooms{{Id: "lpl", Name: "LPL赛事"}, {Id: "991111", Name: "TheShy", Count: 1000}}
+	} else {
+		err := json.Unmarshal([]byte(config), &m.rooms)
 		if err != nil {
 			log.Printf("load history room failed: %s", err)
 		}
 	}
-	r.rooms = rooms
 
-	r.update()
+	m.updateCard()
 
-	go r.updateStatus()
+	go m.updateRoomStatus()
 }
 
 // Add 添加访问记录
-func (r *History) Add(room *api.Room) {
+func (m *History) Add(room *api.Room) {
 	var isExisted = false
-	for _, item := range r.rooms {
+	for _, item := range m.rooms {
 		if item.Id == room.Id {
 			item.Count++
 			isExisted = true
@@ -47,14 +51,14 @@ func (r *History) Add(room *api.Room) {
 	}
 	if !isExisted {
 		room.Status = 1
-		r.rooms = append(r.rooms, room)
-		r.update()
+		m.rooms = append(m.rooms, room)
+		m.updateCard()
 	}
 }
 
 // Get 获取room信息
-func (r *History) Get(roomId string) *api.Room {
-	for _, v := range r.rooms {
+func (m *History) Get(roomId string) *api.Room {
+	for _, v := range m.rooms {
 		if v.Id == roomId {
 			return v
 		}
@@ -63,26 +67,30 @@ func (r *History) Get(roomId string) *api.Room {
 }
 
 // Delete 删除一个room信息
-func (r *History) Delete(roomId string) {
+func (m *History) Delete(roomId string) {
 	var result = api.Rooms{}
-	for _, v := range r.rooms {
+	for _, v := range m.rooms {
 		if v.Id == roomId {
 			continue
 		}
 		result = append(result, v)
 	}
-	r.rooms = result
+	m.rooms = result
+	m.updateCard()
 }
 
-func (r *History) update() {
-	r.app.historyList.RemoveAll()
-	for _, room := range r.rooms {
+func (m *History) updateCard() {
+	m.app.recentsList.RemoveAll()
+	for _, room := range m.rooms {
 		name := room.Name
 		if name == "" {
 			name = room.Id
 		}
-		if utf8.RuneCountInString(name) > 8 {
-			name = string([]rune(name)[:8]) + "..."
+		if utf8.RuneCountInString(name) > 10 {
+			name = string([]rune(name)[:10]) + "..."
+		}
+		if utf8.RuneCountInString(room.Description) > 12 {
+			room.Description = string([]rune(room.Description)[:12]) + "..."
 		}
 		uri, err := storage.ParseURI(room.Screenshot)
 		if err != nil {
@@ -94,21 +102,30 @@ func (r *History) update() {
 
 		roomId := room.Id
 		card := NewTappedCard(name, room.Description, image, func() {
-			r.app.submit(roomId)
+			m.app.submit(roomId)
 		}, func() {
-			r.app.remove(roomId)
+			m.app.remove(roomId)
 		})
 		card.Resize(fyne.Size{
 			Width:  255,
 			Height: 200,
 		})
-		r.app.historyList.Add(card)
+		m.app.recentsList.Add(card)
 	}
-	r.app.historyList.Refresh()
+	m.app.recentsList.Refresh()
+}
+
+// Save 保存访问记录
+func (m *History) Save() {
+	text, err := json.Marshal(&m.rooms)
+	if err != nil {
+		return
+	}
+	m.app.fyne.Preferences().SetString(preferenceKeyHistory, string(text))
 }
 
 // 自动更新直播间状态
-func (r *History) updateStatus() {
+func (m *History) updateRoomStatus() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("something error happend: %s\n", err)
@@ -116,10 +133,10 @@ func (r *History) updateStatus() {
 	}()
 	ticker := time.NewTicker(time.Minute * 1)
 	for {
-		for i, room := range r.rooms {
-			roomInfo, err := r.app.api.GetRealUrl(room.Id)
+		for i, room := range m.rooms {
+			roomInfo, err := m.app.api.GetRealUrl(room.Id)
 			if err != nil {
-				log.Printf("update status error: [%s] %s", room.Name, err)
+				log.Printf("updateCard status error: [%s] %s", room.Name, err)
 				continue
 			}
 			room.Urls = roomInfo.Urls
@@ -130,23 +147,14 @@ func (r *History) updateStatus() {
 			} else {
 				room.Status = 0
 			}
-			log.Printf("update status success: [%s]", room.Name)
-			if len(r.rooms) > 10 || (i+1)%10 == 0 {
-				r.update()
+			log.Printf("updateCard status success: [%s]", room.Name)
+			if len(m.rooms) > 10 || (i+1)%10 == 0 {
+				m.updateCard()
 			}
 		}
-		sort.Sort(r.rooms)
-		r.update()
-		r.save()
+		log.Println("-----------updateCard status finished-----------")
+		sort.Sort(m.rooms)
+		m.updateCard()
 		<-ticker.C
 	}
-}
-
-// save 保存访问记录
-func (r *History) save() {
-	text, err := json.Marshal(&r.rooms)
-	if err != nil {
-		return
-	}
-	r.app.fyne.Preferences().SetString("recents", string(text))
 }
