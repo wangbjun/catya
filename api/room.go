@@ -6,8 +6,8 @@ type Room struct {
 	Description string   `json:"description"`
 	Screenshot  string   `json:"screenshot"`
 	Count       int      `json:"count"`
-	Status      int      `json:"-"`
-	Urls        []string `json:"-"`
+	Status      int      `json:"status"`
+	Urls        []string `json:"urls"`
 }
 
 type Rooms []*Room

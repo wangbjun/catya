@@ -4,10 +4,10 @@ import (
 	"catya/api"
 	"encoding/json"
 	"fmt"
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/storage"
 	"log"
+	"math/rand"
 	"sort"
 	"time"
 	"unicode/utf8"
@@ -22,8 +22,8 @@ func NewHistory(app *App) *History {
 	return &History{app: app}
 }
 
-// Init 加载历史访问记录
-func (m *History) Init() {
+// LoadConf 加载历史访问记录
+func (m *History) LoadConf() {
 	config := m.app.fyne.Preferences().String(preferenceKeyHistory)
 	if config == "" {
 		m.rooms = api.Rooms{{Id: "lpl", Name: "LPL赛事"}, {Id: "991111", Name: "TheShy", Count: 1000}}
@@ -82,15 +82,18 @@ func (m *History) Delete(roomId string) {
 func (m *History) updateCard() {
 	m.app.recentsList.RemoveAll()
 	for _, room := range m.rooms {
+		id := room.Id
 		name := room.Name
+		description := room.Description
+
 		if name == "" {
-			name = room.Id
+			name = id
 		}
 		if utf8.RuneCountInString(name) > 10 {
 			name = string([]rune(name)[:10]) + "..."
 		}
-		if utf8.RuneCountInString(room.Description) > 12 {
-			room.Description = string([]rune(room.Description)[:12]) + "..."
+		if utf8.RuneCountInString(description) > 12 {
+			description = string([]rune(description)[:12]) + "..."
 		}
 		uri, err := storage.ParseURI(room.Screenshot)
 		if err != nil {
@@ -99,16 +102,10 @@ func (m *History) updateCard() {
 		}
 		image := canvas.NewImageFromURI(uri)
 		image.FillMode = canvas.ImageFillOriginal
-
-		roomId := room.Id
-		card := NewTappedCard(name, room.Description, image, func() {
-			m.app.submit(roomId)
+		card := NewTappedCard(name, description, image, func() {
+			m.app.submit(id)
 		}, func() {
-			m.app.remove(roomId)
-		})
-		card.Resize(fyne.Size{
-			Width:  255,
-			Height: 200,
+			m.app.remove(id)
 		})
 		m.app.recentsList.Add(card)
 	}
@@ -131,8 +128,9 @@ func (m *History) updateRoomStatus() {
 			log.Printf("something error happend: %s\n", err)
 		}
 	}()
-	ticker := time.NewTicker(time.Minute * 1)
+	ticker := time.NewTicker(time.Second * 50)
 	for {
+		time.Sleep(time.Second * time.Duration(rand.Intn(10)))
 		for i, room := range m.rooms {
 			roomInfo, err := m.app.api.GetRealUrl(room.Id)
 			if err != nil {
@@ -148,7 +146,7 @@ func (m *History) updateRoomStatus() {
 				room.Status = 0
 			}
 			log.Printf("updateCard status success: [%s]", room.Name)
-			if len(m.rooms) > 10 || (i+1)%10 == 0 {
+			if len(m.rooms) > 10 && (i+1)%10 == 0 {
 				m.updateCard()
 			}
 		}

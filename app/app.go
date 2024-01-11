@@ -3,12 +3,15 @@ package app
 import (
 	"catya/api"
 	"catya/theme"
+	"encoding/json"
+	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
 	"math/rand"
+	"net"
 	"net/url"
 	"os/exec"
 	"strings"
@@ -22,6 +25,7 @@ const (
 type App struct {
 	api     api.LiveApi
 	history *History
+	ipc     chan string
 
 	fyne         fyne.App
 	window       fyne.Window
@@ -31,12 +35,17 @@ type App struct {
 	recentsList  *fyne.Container
 }
 
+type MPVCommand struct {
+	Command []interface{} `json:"command"`
+}
+
 func New(api api.LiveApi) *App {
 	catya := app.NewWithID("catya")
 	catya.Settings().SetTheme(&theme.MyTheme{})
 
 	application := &App{
 		api:         api,
+		ipc:         make(chan string),
 		fyne:        catya,
 		window:      catya.NewWindow("Catya"),
 		recentsList: container.New(NewHistoryLayout()),
@@ -54,7 +63,7 @@ func (app *App) Run() {
 }
 
 func (app *App) init() {
-	app.history.Init()
+	app.history.LoadConf()
 
 	app.inputName = widget.NewEntry()
 	app.inputName.PlaceHolder = "请输入直播间备注名称，可选"
@@ -80,7 +89,7 @@ func (app *App) init() {
 }
 
 func (app *App) setUpSize() {
-	app.window.SetCloseIntercept(func() {
+	app.window.SetOnClosed(func() {
 		app.saveSize()
 		app.history.Save()
 		app.window.Close()
@@ -90,7 +99,7 @@ func (app *App) setUpSize() {
 	if len(windowSize) == 2 {
 		app.window.Resize(fyne.NewSize(float32(windowSize[0]), float32(windowSize[1])))
 	} else {
-		app.window.Resize(fyne.NewSize(1025, 700))
+		app.window.Resize(fyne.NewSize(1280, 720))
 	}
 }
 
@@ -106,12 +115,6 @@ func (app *App) submit(roomId string) {
 	if err == nil && parse.Path != "" {
 		roomId = strings.Trim(parse.Path, "/")
 	}
-	app.submitButton.Text = "查询中......"
-	app.submitButton.Disable()
-	defer func() {
-		app.submitButton.Text = "查询&打开"
-		app.submitButton.Enable()
-	}()
 	roomInfo := app.history.Get(roomId)
 	if roomInfo == nil {
 		roomInfo, err = app.api.GetRealUrl(roomId)
@@ -138,8 +141,13 @@ func (app *App) submit(roomId string) {
 	if len(roomInfo.Urls) > 1 {
 		randUrl = roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
 	}
-
-	err = exec.Command("mpv", "--title="+roomInfo.Name, randUrl).Start()
+	title := fmt.Sprintf("%s: %s", roomInfo.Name, roomInfo.Description)
+	err = app.sendIPC([]interface{}{"loadfile", randUrl})
+	err = app.sendIPC([]interface{}{"set_property", "title", title})
+	if err == nil {
+		return
+	}
+	err = exec.Command("mpv", "--title="+title, "--input-ipc-server=/tmp/mpv_socket", randUrl).Start()
 	if err != nil {
 		err = exec.Command("smplayer", randUrl).Start()
 	}
@@ -162,4 +170,23 @@ func (app *App) alert(msg string) {
 func (app *App) saveSize() {
 	currentSize := app.window.Canvas().Size()
 	app.fyne.Preferences().SetFloatList(preferenceKeyWindowSize, []float64{float64(currentSize.Width), float64(currentSize.Height)})
+}
+
+// 给mpv发送IPC命令
+func (app *App) sendIPC(command []interface{}) error {
+	conn, err := net.Dial("unix", "/tmp/mpv_socket")
+	if err != nil {
+		return err
+	}
+	defer conn.Close()
+	// 构建一个命令
+	cmd := MPVCommand{
+		Command: command,
+	}
+	cmdJSON, err := json.Marshal(cmd)
+	if err != nil {
+		return err
+	}
+	_, err = conn.Write(append(cmdJSON, '\n'))
+	return err
 }
