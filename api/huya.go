@@ -20,9 +20,7 @@ type Huya struct {
 
 func New() Huya {
 	return Huya{
-		httpClient: http.Client{
-			Timeout: time.Second * 5,
-		},
+		httpClient: http.Client{Timeout: time.Second * 5},
 	}
 }
 
@@ -50,15 +48,18 @@ func (r *Huya) GetRealUrl(roomId string) (*Room, error) {
 	if matches == nil || len(matches) < 2 {
 		return nil, errors.New("查询失败")
 	}
-	return extractInfo(matches[1])
+	return r.extractInfo(matches[1])
 }
 
-func extractInfo(content string) (*Room, error) {
+func (r *Huya) extractInfo(content string) (*Room, error) {
 	parse := gjson.Parse(content)
+
 	var (
+		//直播间配置
 		nickName    = parse.Get("roomInfo.tProfileInfo.sNick").String()
 		description = parse.Get("roomInfo.tLiveInfo.sIntroduction").String()
 		screenshot  = parse.Get("roomInfo.tLiveInfo.sScreenshot").String()
+		streamInfo  = parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
 	)
 	if description == "" {
 		description = "主播暂不在直播哦～"
@@ -66,11 +67,15 @@ func extractInfo(content string) (*Room, error) {
 	if screenshot == "" {
 		screenshot = "https://a.msstatic.com/huya/main/assets/img/default/338x190.jpg"
 	}
-	streamInfo := parse.Get("roomInfo.tLiveInfo.tLiveStreamInfo.vStreamInfo.value")
+
 	var urls []string
 	streamInfo.ForEach(func(key, value gjson.Result) bool {
+		sFlvUrl := value.Get("sFlvUrl").String()
+		if strings.Contains(sFlvUrl, "huyalive") { //视频源有问题
+			return true
+		}
 		urlStr := fmt.Sprintf("%s/%s.%s?%s",
-			value.Get("sFlvUrl").String(),
+			sFlvUrl,
 			value.Get("sStreamName").String(),
 			value.Get("sFlvUrlSuffix").String(),
 			parseAntiCode(value.Get("sFlvAntiCode").String(), value.Get("sStreamName").String()))

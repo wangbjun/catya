@@ -29,7 +29,7 @@ func (g *HistoryLayout) Layout(objects []fyne.CanvasObject, size fyne.Size) {
 	g.width = g.originalWidth
 	g.height = g.originalHeight
 	//如果有剩余空间，则增加对象大小来填充空间
-	if remainingSpace > 0 && remainingSpace < g.originalWidth {
+	if perRow < len(objects) && remainingSpace > 0 && remainingSpace < g.originalWidth {
 		perSpace := remainingSpace / float32(perRow)
 		g.width += perSpace
 		g.height += g.height * (perSpace / g.width)

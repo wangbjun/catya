@@ -4,20 +4,24 @@ import (
 	"catya/api"
 	"catya/theme"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/widget"
+	"log"
 	"math/rand"
 	"net"
 	"net/url"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 const (
+	mpvIPCPath              = "/tmp/mpv_socket"
 	preferenceKeyWindowSize = "windowSize"
 	preferenceKeyHistory    = "recentsList"
 )
@@ -25,7 +29,7 @@ const (
 type App struct {
 	api     api.LiveApi
 	history *History
-	ipc     chan string
+	mpvIPC  net.Conn
 
 	fyne         fyne.App
 	window       fyne.Window
@@ -45,7 +49,6 @@ func New(api api.LiveApi) *App {
 
 	application := &App{
 		api:         api,
-		ipc:         make(chan string),
 		fyne:        catya,
 		window:      catya.NewWindow("Catya"),
 		recentsList: container.New(NewHistoryLayout()),
@@ -56,13 +59,13 @@ func New(api api.LiveApi) *App {
 }
 
 func (app *App) Run() {
-	app.init()
-	app.setUpSize()
+	app.SetLayout()
+	app.SetSize()
 	app.window.CenterOnScreen()
 	app.window.ShowAndRun()
 }
 
-func (app *App) init() {
+func (app *App) SetLayout() {
 	app.history.LoadConf()
 
 	app.inputName = widget.NewEntry()
@@ -71,12 +74,12 @@ func (app *App) init() {
 	app.inputRoom = widget.NewEntry()
 	app.inputRoom.PlaceHolder = "请输入直播间URL或ID，比如：991111、uzi"
 	app.inputRoom.OnSubmitted = func(roomId string) {
-		app.submit(roomId)
+		app.Submit(roomId)
 		app.inputRoom.SetText("")
 	}
 
 	app.submitButton = widget.NewButton("查询&打开", func() {
-		app.submit("")
+		app.Submit("")
 		app.inputRoom.SetText("")
 		app.inputName.SetText("")
 	})
@@ -88,9 +91,9 @@ func (app *App) init() {
 		))
 }
 
-func (app *App) setUpSize() {
+func (app *App) SetSize() {
 	app.window.SetOnClosed(func() {
-		app.saveSize()
+		app.SaveSize()
 		app.history.Save()
 		app.window.Close()
 	})
@@ -103,12 +106,12 @@ func (app *App) setUpSize() {
 	}
 }
 
-func (app *App) submit(roomId string) {
+func (app *App) Submit(roomId string) {
 	if roomId == "" {
 		roomId = strings.TrimSpace(app.inputRoom.Text)
 	}
 	if roomId == "" {
-		app.alert("请输入直播间地址或ID")
+		app.ShowInfo("请输入直播间地址或ID")
 		return
 	}
 	parse, err := url.Parse(roomId)
@@ -119,7 +122,7 @@ func (app *App) submit(roomId string) {
 	if roomInfo == nil {
 		roomInfo, err = app.api.GetRealUrl(roomId)
 		if err != nil {
-			app.alert("查询失败")
+			app.ShowInfo("查询失败")
 			return
 		}
 	}
@@ -128,12 +131,12 @@ func (app *App) submit(roomId string) {
 		roomInfo.Name = app.inputName.Text
 	}
 	if roomInfo.Name == "" {
-		app.alert("直播间不存在")
+		app.ShowInfo("直播间不存在")
 		return
 	}
 	app.history.Add(roomInfo)
 	if len(roomInfo.Urls) == 0 {
-		app.alert("主播暂未开播")
+		app.ShowInfo("主播暂未开播")
 		return
 	}
 	//随机取一个地址
@@ -141,45 +144,70 @@ func (app *App) submit(roomId string) {
 	if len(roomInfo.Urls) > 1 {
 		randUrl = roomInfo.Urls[rand.Intn(len(roomInfo.Urls)-1)]
 	}
+
 	title := fmt.Sprintf("%s: %s", roomInfo.Name, roomInfo.Description)
-	err = app.sendIPC([]interface{}{"loadfile", randUrl})
-	err = app.sendIPC([]interface{}{"set_property", "title", title})
-	if err == nil {
-		return
+	if app.mpvIPC != nil {
+		err = app.SendIPC([]interface{}{"loadfile", randUrl})
+		err = app.SendIPC([]interface{}{"set_property", "title", title})
+		if err == nil {
+			return
+		}
+		log.Printf("SendIPC error:%s\n", err)
 	}
-	err = exec.Command("mpv", "--title="+title, "--input-ipc-server=/tmp/mpv_socket", randUrl).Start()
+	err = exec.Command("mpv", "--title="+title, "--input-ipc-server="+mpvIPCPath, randUrl).Start()
 	if err != nil {
 		err = exec.Command("smplayer", randUrl).Start()
 	}
 	if err != nil {
 		app.window.Clipboard().SetContent(randUrl)
-		app.alert("直播地址已复制到粘贴板，可以手动打开播放器播放！")
-		app.alert("播放失败，请确认是否安装smplayer或mpv，并确保在终端可以调用！")
+		app.ShowInfo("直播地址已复制到粘贴板，可以手动打开播放器播放！")
+		app.ShowInfo("播放失败，请确认是否安装smplayer或mpv，并确保在终端可以调用！")
+		return
+	}
+	err = app.InitIPC()
+	if err != nil {
+		log.Printf("InitIPC error:%s\n", err)
 	}
 }
 
-func (app *App) remove(roomId string) {
+func (app *App) RemoveRoom(roomId string) {
 	app.history.Delete(roomId)
 }
 
-func (app *App) alert(msg string) {
+func (app *App) ShowInfo(msg string) {
 	info := dialog.NewInformation("提示", msg, app.window)
 	info.Show()
 }
 
-func (app *App) saveSize() {
+func (app *App) SaveSize() {
 	currentSize := app.window.Canvas().Size()
 	app.fyne.Preferences().SetFloatList(preferenceKeyWindowSize, []float64{float64(currentSize.Width), float64(currentSize.Height)})
 }
 
-// 给mpv发送IPC命令
-func (app *App) sendIPC(command []interface{}) error {
-	conn, err := net.Dial("unix", "/tmp/mpv_socket")
-	if err != nil {
-		return err
+// InitIPC 初始化mpv ipc连接
+func (app *App) InitIPC() error {
+	var err error
+	for i := 0; i < 5; i++ {
+		conn, e := net.Dial("unix", mpvIPCPath)
+		err = e
+		if e != nil {
+			time.Sleep(time.Second)
+			continue
+		}
+		app.mpvIPC = conn
+		return nil
 	}
-	defer conn.Close()
-	// 构建一个命令
+	return err
+}
+
+// SendIPC 给mpv发送ipc命令
+func (app *App) SendIPC(command []interface{}) error {
+	if app.mpvIPC == nil {
+		app.mpvIPC, _ = net.Dial("unix", mpvIPCPath)
+		if app.mpvIPC == nil {
+			return errors.New("mpv ipc conn is null")
+		}
+	}
 	cmd := MPVCommand{
 		Command: command,
 	}
@@ -187,6 +215,6 @@ func (app *App) sendIPC(command []interface{}) error {
 	if err != nil {
 		return err
 	}
-	_, err = conn.Write(append(cmdJSON, '\n'))
+	_, err = app.mpvIPC.Write(append(cmdJSON, '\n'))
 	return err
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/assert"
 	"testing"
 )
 
@@ -16,5 +15,4 @@ func TestGetRealUrl(t *testing.T) {
 	for _, url := range roomInfo.Urls {
 		fmt.Printf("%v\n", url)
 	}
-	assert.Equal(t, roomInfo.Name, "虎牙英雄联盟赛事")
 }

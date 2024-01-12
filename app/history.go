@@ -3,7 +3,6 @@ package app
 import (
 	"catya/api"
 	"encoding/json"
-	"fmt"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/storage"
 	"log"
@@ -34,9 +33,9 @@ func (m *History) LoadConf() {
 		}
 	}
 
-	m.updateCard()
+	m.UpdateCard()
 
-	go m.updateRoomStatus()
+	go m.UpdateRoomStatus()
 }
 
 // Add 添加访问记录
@@ -52,7 +51,7 @@ func (m *History) Add(room *api.Room) {
 	if !isExisted {
 		room.Status = 1
 		m.rooms = append(m.rooms, room)
-		m.updateCard()
+		m.UpdateCard()
 	}
 }
 
@@ -76,10 +75,10 @@ func (m *History) Delete(roomId string) {
 		result = append(result, v)
 	}
 	m.rooms = result
-	m.updateCard()
+	m.UpdateCard()
 }
 
-func (m *History) updateCard() {
+func (m *History) UpdateCard() {
 	m.app.recentsList.RemoveAll()
 	for _, room := range m.rooms {
 		id := room.Id
@@ -97,19 +96,19 @@ func (m *History) updateCard() {
 		}
 		uri, err := storage.ParseURI(room.Screenshot)
 		if err != nil {
-			fmt.Printf("parse image url failed:%s\n", err)
+			log.Printf("parse image url failed:%s\n", err)
 			continue
 		}
 		image := canvas.NewImageFromURI(uri)
 		image.FillMode = canvas.ImageFillOriginal
 		card := NewTappedCard(name, description, image, func() {
-			m.app.submit(id)
+			m.app.Submit(id)
 		}, func() {
-			m.app.remove(id)
+			m.app.RemoveRoom(id)
 		})
 		m.app.recentsList.Add(card)
 	}
-	m.app.recentsList.Refresh()
+	canvas.Refresh(m.app.recentsList)
 }
 
 // Save 保存访问记录
@@ -121,8 +120,8 @@ func (m *History) Save() {
 	m.app.fyne.Preferences().SetString(preferenceKeyHistory, string(text))
 }
 
-// 自动更新直播间状态
-func (m *History) updateRoomStatus() {
+// UpdateRoomStatus 自动更新直播间状态
+func (m *History) UpdateRoomStatus() {
 	defer func() {
 		if err := recover(); err != nil {
 			log.Printf("something error happend: %s\n", err)
@@ -134,7 +133,7 @@ func (m *History) updateRoomStatus() {
 		for i, room := range m.rooms {
 			roomInfo, err := m.app.api.GetRealUrl(room.Id)
 			if err != nil {
-				log.Printf("updateCard status error: [%s] %s", room.Name, err)
+				log.Printf("UpdateCard status error: [%s] %s", room.Name, err)
 				continue
 			}
 			room.Urls = roomInfo.Urls
@@ -145,14 +144,14 @@ func (m *History) updateRoomStatus() {
 			} else {
 				room.Status = 0
 			}
-			log.Printf("updateCard status success: [%s]", room.Name)
+			log.Printf("UpdateCard status success: [%s]", room.Name)
 			if len(m.rooms) > 10 && (i+1)%10 == 0 {
-				m.updateCard()
+				m.UpdateCard()
 			}
 		}
-		log.Println("-----------updateCard status finished-----------")
+		log.Println("-----------UpdateCard status finished-----------")
 		sort.Sort(m.rooms)
-		m.updateCard()
+		m.UpdateCard()
 		<-ticker.C
 	}
 }
