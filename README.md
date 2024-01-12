@@ -10,14 +10,12 @@
 目前编译了Linux、Windows、Mac这几个平台的安装包，需要的可以从release页面下载安装，其它平台可以参考官方编译文档自行编译：https://developer.fyne.io/started/packaging
 
 1. 复制虎牙直播间地址，或者直接输入直播间号，比如lpl，或者s4k，支持备注功能，方便记忆
-
 2. 回车或者点击查询并打开
-
 3. 如果你安装了SMPlayer、MPV的话，点击的时候自动打开直播，没安装的话就自己手动打开吧，现在很多视频播放软件都支持网络播放。请自行安装相关播放器，检测一下，命令行输入mpv、smplayer有反应那就可以，因为这个功能本质上就是调用Shell命令。
+4. 支持自动保存窗口大小，动态布局
+5. 最近历史记录按照访问次数排序，目前1分钟更新一次直播状态，左键点击打开直播间、右键删除记录。
 
-4. 最近历史记录按照访问次数排序，目前1分钟更新一次直播状态，左键点击打开直播间、右键删除记录。
-
-![](resource/play.png)
+![image](https://github.com/wangbjun/catya/assets/39372433/b7cc76c6-c29a-4e1b-b22f-d4c632028226)
 
 > 推荐使用mpv播放器，Linux下可使用```sudo apt install mpv```命令安装，Mac下可以使用```brew install mpv```安装，其它系统自行解决。
 
